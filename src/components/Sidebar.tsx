@@ -11,7 +11,6 @@ import {
 import { useVault } from '@/stores/vault';
 import { FileTree } from './FileTree';
 import { TagPanel } from './TagPanel';
-import { BacklinksPanel } from './BacklinksPanel';
 import { cn } from '@/lib/utils';
 
 interface Props {
@@ -159,8 +158,6 @@ export function Sidebar({ onOpenPalette }: Props) {
           {tagsOpen && <TagPanel />}
         </div>
       </div>
-
-      <BacklinksPanel />
 
       {/* Footer */}
       <div className="border-t border-border-subtle px-3 py-2.5 flex items-center gap-2 text-[11px] text-text-muted">

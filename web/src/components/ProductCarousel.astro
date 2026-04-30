@@ -1,0 +1,136 @@
+---
+import EditorMock from './mocks/EditorMock.astro';
+import GraphMock from './mocks/GraphMock.astro';
+import CanvasMock from './mocks/CanvasMock.astro';
+import DailyMock from './mocks/DailyMock.astro';
+
+const slides = [
+  { id: 'editor', label: 'Editor', hint: 'Notion-style blocks, plain markdown on disk' },
+  { id: 'graph', label: 'Connections', hint: 'See your knowledge as a network' },
+  { id: 'canvas', label: 'Canvas', hint: 'Spatial thinking, infinite whiteboard' },
+  { id: 'daily', label: 'Daily note', hint: 'Date masthead, mood, loose ends' },
+];
+---
+
+<div data-carousel class="relative">
+  <!-- Frame -->
+  <div class="relative aspect-[16/10] w-full mock-window rounded-[14px] border border-rule overflow-hidden bg-paper">
+    <div data-slide class="absolute inset-0 opacity-100 transition-opacity duration-500">
+      <EditorMock />
+    </div>
+    <div data-slide class="absolute inset-0 opacity-0 pointer-events-none transition-opacity duration-500">
+      <GraphMock />
+    </div>
+    <div data-slide class="absolute inset-0 opacity-0 pointer-events-none transition-opacity duration-500">
+      <CanvasMock />
+    </div>
+    <div data-slide class="absolute inset-0 opacity-0 pointer-events-none transition-opacity duration-500">
+      <DailyMock />
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="mt-7 grid grid-cols-2 md:grid-cols-4 gap-px bg-rule rounded-[10px] overflow-hidden border border-rule">
+    {slides.map((s, i) => (
+      <button
+        data-tab
+        data-index={i}
+        class:list={[
+          'group relative bg-paper-2 px-4 py-3 text-left transition-colors hover:bg-paper-3 focus:outline-none',
+          i === 0 ? 'is-active' : '',
+        ]}
+      >
+        <div class="flex items-center gap-2">
+          <span data-tab-label class="font-mono text-[10.5px] uppercase tracking-[0.12em] text-ink-3 group-[.is-active]:text-accent-ink transition-colors">
+            {s.label}
+          </span>
+          <span data-tab-num class="ml-auto font-mono text-[10px] text-ink-4">0{i + 1}</span>
+        </div>
+        <div class="mt-1.5 font-serif text-[13.5px] text-ink-2 group-[.is-active]:text-ink leading-snug">
+          {s.hint}
+        </div>
+        <span data-tab-bar class="absolute left-0 right-0 bottom-0 h-[2px] bg-accent scale-x-0 origin-left transition-transform duration-[6000ms] ease-linear group-[.is-active]:scale-x-100"></span>
+      </button>
+    ))}
+  </div>
+</div>
+
+<script is:inline>
+  (function () {
+    const root = document.querySelector('[data-carousel]');
+    if (!root) return;
+    const slides = root.querySelectorAll('[data-slide]');
+    const tabs = root.querySelectorAll('[data-tab]');
+    let active = 0;
+    let timer = null;
+    const PERIOD = 6000;
+
+    function paint(i, animate = true) {
+      slides.forEach((s, idx) => {
+        const on = idx === i;
+        s.classList.toggle('opacity-0', !on);
+        s.classList.toggle('opacity-100', on);
+        s.classList.toggle('pointer-events-none', !on);
+      });
+      tabs.forEach((t, idx) => {
+        t.classList.toggle('is-active', idx === i);
+        // Reset the progress bar so the active one re-animates from 0 → 100%.
+        const bar = t.querySelector('[data-tab-bar]');
+        if (!bar) return;
+        if (idx === i && animate) {
+          bar.style.transition = 'none';
+          bar.style.transform = 'scaleX(0)';
+          // Force reflow then re-enable transition
+          // eslint-disable-next-line no-unused-expressions
+          bar.offsetWidth;
+          bar.style.transition = `transform ${PERIOD}ms linear`;
+          bar.style.transform = 'scaleX(1)';
+        } else if (idx !== i) {
+          bar.style.transition = 'none';
+          bar.style.transform = 'scaleX(0)';
+        }
+      });
+      active = i;
+    }
+
+    function advance() {
+      paint((active + 1) % slides.length);
+    }
+
+    function start() {
+      stop();
+      timer = window.setInterval(advance, PERIOD);
+    }
+    function stop() {
+      if (timer) {
+        window.clearInterval(timer);
+        timer = null;
+      }
+    }
+
+    tabs.forEach((t, i) =>
+      t.addEventListener('click', () => {
+        paint(i);
+        start();
+      })
+    );
+
+    // Pause on hover so the user can study a frame
+    root.addEventListener('mouseenter', stop);
+    root.addEventListener('mouseleave', start);
+
+    // Pause when the page is hidden — saves a tiny amount of repaints.
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) stop();
+      else start();
+    });
+
+    paint(0);
+    start();
+  })();
+</script>
+
+<style is:global>
+  /* Use Tailwind's group-data variant manually with `is-active` class so the tab bar
+     animates without needing client-side framework wiring. */
+</style>

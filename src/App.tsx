@@ -11,7 +11,7 @@ import { CanvasView } from '@/components/CanvasView';
 import { GraphView } from '@/components/GraphView';
 import { EmptyState } from '@/components/EmptyState';
 import { WelcomeNote } from '@/components/WelcomeNote';
-import { OutlinePanel } from '@/components/OutlinePanel';
+import { ConnectionsPanel } from '@/components/ConnectionsPanel';
 import { CommandPalette } from '@/components/CommandPalette';
 import { Onboarding } from '@/components/Onboarding';
 import { ShortcutsHelp } from '@/components/ShortcutsHelp';
@@ -145,7 +145,7 @@ export default function App() {
               )}
             </div>
           </div>
-          {!inFocus && view === 'editor' && activeFile && !activeFile.endsWith('.canvas') && <OutlinePanel />}
+          {!inFocus && view === 'editor' && activeFile && !activeFile.endsWith('.canvas') && <ConnectionsPanel />}
         </main>
       </div>
       <CommandPalette

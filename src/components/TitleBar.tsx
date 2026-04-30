@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   Plus,
   Calendar,
@@ -16,6 +16,7 @@ import {
 import { useVault } from '@/stores/vault';
 import { useTheme } from '@/stores/theme';
 import { useUi } from '@/stores/ui';
+import { ThemePicker } from './ThemePicker';
 import { cn } from '@/lib/utils';
 import { exportHtml, exportMarkdown, exportPdf } from '@/lib/export';
 
@@ -34,11 +35,13 @@ export function TitleBar({ onOpenPalette, onShowShortcuts, onGetEditorHtml }: Pr
   const activeFile = useVault((s) => s.activeFile);
   const files = useVault((s) => s.files);
 
-  const theme = useTheme((s) => s.theme);
-  const toggleTheme = useTheme((s) => s.toggle);
+  const mode = useTheme((s) => s.mode);
   const toggleFocus = useUi((s) => s.toggleFocus);
 
   const [moreOpen, setMoreOpen] = useState(false);
+  const [themeOpen, setThemeOpen] = useState(false);
+  const [themeAnchor, setThemeAnchor] = useState<{ right: number; bottom: number; top: number; left: number } | null>(null);
+  const themeBtnRef = useRef<HTMLButtonElement | null>(null);
 
   // Build breadcrumbs from active file path (Side topbar shows folder / sub / note)
   const crumbs: string[] = (() => {
@@ -82,12 +85,25 @@ export function TitleBar({ onOpenPalette, onShowShortcuts, onGetEditorHtml }: Pr
         >
           <Keyboard size={14} />
         </IconBtn>
-        <IconBtn
-          onClick={toggleTheme}
-          title={theme === 'dark' ? 'Switch to light' : 'Switch to dark'}
+        <button
+          ref={themeBtnRef}
+          onClick={() => {
+            const rect = themeBtnRef.current?.getBoundingClientRect();
+            if (rect) {
+              setThemeAnchor({
+                right: rect.right,
+                bottom: rect.bottom,
+                top: rect.top,
+                left: rect.left,
+              });
+            }
+            setThemeOpen((v) => !v);
+          }}
+          className="w-7 h-7 grid place-items-center rounded-md text-text-muted hover:text-text hover:bg-bg-elevated transition-colors"
+          title="Theme & mode"
         >
-          {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
-        </IconBtn>
+          {mode === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+        </button>
         <IconBtn
           onClick={() => openOrCreateDaily()}
           disabled={!vaultPath}
@@ -177,6 +193,11 @@ export function TitleBar({ onOpenPalette, onShowShortcuts, onGetEditorHtml }: Pr
         )}
         </div>
       </div>
+      <ThemePicker
+        open={themeOpen}
+        onClose={() => setThemeOpen(false)}
+        anchor={themeAnchor}
+      />
     </div>
   );
 }

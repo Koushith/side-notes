@@ -4,9 +4,18 @@ import { NodeCircleProgram } from 'sigma/rendering';
 import Graph from 'graphology';
 import forceAtlas2 from 'graphology-layout-forceatlas2';
 import { useVault } from '@/stores/vault';
+import { useTheme } from '@/stores/theme';
 import { resolveWikilink } from '@/lib/markdown';
 import { Maximize2, Compass, Globe } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+/** Read a `--c-*` CSS variable (stored as "R G B" triples) and return an `rgb(...)` color
+ *  Sigma can ingest. We re-read these on every render that depends on the theme so
+ *  switching theme/mode repaints the graph correctly. */
+function readVar(name: string, fallback = '0 0 0'): string {
+  const triple = getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+  return `rgb(${triple})`;
+}
 
 // Categorical palette for folders — soft pastels that read well on dark bg.
 const PALETTE = [
@@ -33,6 +42,8 @@ export function GraphView() {
   const openFile = useVault((s) => s.openFile);
   const setView = useVault((s) => s.setView);
   const activeFile = useVault((s) => s.activeFile);
+  const themeKey = useTheme((s) => s.theme);
+  const themeMode = useTheme((s) => s.mode);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sigmaRef = useRef<Sigma | null>(null);
   const [hover, setHover] = useState<string | null>(null);
@@ -130,16 +141,23 @@ export function GraphView() {
     const settings = forceAtlas2.inferSettings(graph);
     forceAtlas2.assign(graph, { iterations: 200, settings });
 
+    // Read theme colors so labels/edges/fades stay legible on every palette + mode.
+    const inkColor = readVar('--c-text');
+    const ruleColor = readVar('--c-border');
+    const fadeColor = readVar('--c-bg-hover');
+    const accentColor = readVar('--c-accent');
+    const nodeFadeColor = readVar('--c-bg-hover');
+
     const renderer = new Sigma(graph, containerRef.current, {
       renderEdgeLabels: false,
       defaultNodeType: 'circle',
       nodeProgramClasses: { circle: NodeCircleProgram },
-      labelColor: { color: '#e6e8ee' },
+      labelColor: { color: inkColor },
       labelSize: 12,
       labelWeight: '500',
       labelDensity: 0.7,
       labelGridCellSize: 80,
-      defaultEdgeColor: '#252a36',
+      defaultEdgeColor: ruleColor,
       minCameraRatio: 0.1,
       maxCameraRatio: 10,
     });
@@ -160,13 +178,13 @@ export function GraphView() {
       }
       const highlight = computeHighlightSet(hovered);
       if (highlight.has(node)) return { ...data, zIndex: 1 };
-      return { ...data, color: '#2a2f3d', label: '', zIndex: 0 };
+      return { ...data, color: nodeFadeColor, label: '', zIndex: 0 };
     });
     renderer.setSetting('edgeReducer', (edge, data) => {
       if (!hovered) return data;
       const [s, t] = graph.extremities(edge);
-      if (s === hovered || t === hovered) return { ...data, color: '#7c8cff', size: 1.3 };
-      return { ...data, color: '#1c1f2a' };
+      if (s === hovered || t === hovered) return { ...data, color: accentColor, size: 1.3 };
+      return { ...data, color: fadeColor };
     });
 
     renderer.on('clickNode', ({ node }) => {
@@ -227,7 +245,7 @@ export function GraphView() {
       renderer.kill();
       sigmaRef.current = null;
     };
-  }, [files, activeFile, localMode, openFile, setView]);
+  }, [files, activeFile, localMode, openFile, setView, themeKey, themeMode]);
 
   return (
     <div className="relative w-full h-full bg-bg">
