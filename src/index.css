@@ -1,0 +1,365 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Side — paper / ink / terracotta. Light is default. */
+  :root,
+  [data-theme="light"] {
+    --c-bg: 247 243 236;        /* paper */
+    --c-bg-elevated: 241 236 227; /* paper-2 */
+    --c-bg-hover: 232 226 214;  /* paper-3 */
+    --c-bg-active: 232 226 214;
+    --c-border: 224 217 200;    /* rule */
+    --c-border-subtle: 235 229 214; /* rule-soft */
+    --c-text: 31 29 26;         /* ink */
+    --c-text-muted: 122 116 104; /* ink-3 */
+    --c-text-subtle: 168 162 148; /* ink-4 */
+    --c-accent: 196 98 58;      /* terracotta */
+    --c-accent-hover: 173 84 47;
+    --c-accent-subtle: 240 216 203; /* accent-soft */
+    --c-accent-ink: 139 62 29;
+    --c-tag: 90 123 86;         /* sage */
+    --c-tag-soft: 221 230 216;
+    --c-link: 79 107 143;       /* faded ink-blue */
+    --c-highlight: 245 228 168; /* paper highlighter */
+    --c-code-bg: 241 236 227;
+    --c-inline-code: 31 29 26;
+    --c-inline-code-bg: 241 236 227;
+    --c-scroll-thumb: 224 217 200;
+    --c-scroll-thumb-hover: 196 188 172;
+    --c-tag-bg: 221 230 216;
+    --c-link-bg: 240 216 203;
+    --c-link-bg-hover: 230 200 184;
+    --c-quote-border: 196 98 58;
+    --c-quote-text: 74 70 63;
+  }
+
+  [data-theme="dark"] {
+    --c-bg: 28 26 23;           /* paper dark */
+    --c-bg-elevated: 35 33 32;
+    --c-bg-hover: 44 41 38;
+    --c-bg-active: 50 47 42;
+    --c-border: 50 47 42;       /* rule */
+    --c-border-subtle: 42 39 35;
+    --c-text: 236 230 218;      /* ink */
+    --c-text-muted: 140 134 120; /* ink-3 */
+    --c-text-subtle: 94 88 78;  /* ink-4 */
+    --c-accent: 196 98 58;
+    --c-accent-hover: 220 118 78;
+    --c-accent-subtle: 74 40 24;
+    --c-accent-ink: 220 130 80;
+    --c-tag: 130 168 122;
+    --c-tag-soft: 44 53 40;
+    --c-link: 132 162 198;
+    --c-highlight: 74 62 28;
+    --c-code-bg: 35 33 32;
+    --c-inline-code: 236 230 218;
+    --c-inline-code-bg: 35 33 32;
+    --c-scroll-thumb: 50 47 42;
+    --c-scroll-thumb-hover: 70 65 58;
+    --c-tag-bg: 44 53 40;
+    --c-link-bg: 74 40 24;
+    --c-link-bg-hover: 88 50 30;
+    --c-quote-border: 196 98 58;
+    --c-quote-text: 194 188 175;
+  }
+
+  html, body, #root {
+    height: 100%;
+    overflow: hidden;
+  }
+  .no-scrollbar::-webkit-scrollbar { height: 0; width: 0; }
+  body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    user-select: none;
+  }
+  ::selection {
+    background: rgb(var(--c-accent) / 0.35);
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgb(var(--c-scroll-thumb));
+    border-radius: 8px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--c-scroll-thumb-hover));
+    background-clip: padding-box;
+    border: 2px solid transparent;
+  }
+}
+
+@layer components {
+  .titlebar {
+    -webkit-app-region: drag;
+  }
+  .no-drag {
+    -webkit-app-region: no-drag;
+  }
+
+  /* Editor styling — paper / ink, serif body */
+  .ProseMirror {
+    user-select: text;
+    outline: none;
+    min-height: 100%;
+    padding: 0 0 40vh 0;
+    font-family: var(--font-serif, "Source Serif 4", Georgia, serif);
+    font-size: 16px;
+    line-height: 1.7;
+    color: rgb(var(--c-text));
+  }
+  .ProseMirror p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    float: left;
+    color: rgb(var(--c-text-subtle));
+    pointer-events: none;
+    height: 0;
+    font-style: italic;
+  }
+  .ProseMirror h1 { font-family: var(--font-serif, "Source Serif 4", Georgia, serif); font-size: 32px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin: 1.4em 0 0.3em; }
+  .ProseMirror h2 { font-family: var(--font-serif, "Source Serif 4", Georgia, serif); font-size: 24px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.25; margin: 28px 0 8px; }
+  .ProseMirror h3 { font-family: var(--font-serif, "Source Serif 4", Georgia, serif); font-size: 18px; font-weight: 600; line-height: 1.3; margin: 20px 0 4px; }
+  .ProseMirror p { line-height: 1.7; margin: 6px 0; }
+  .ProseMirror ul, .ProseMirror ol { padding-left: 1.4em; margin: 8px 0; }
+  .ProseMirror ul { list-style: disc; }
+  .ProseMirror ol { list-style: decimal; }
+  .ProseMirror li { margin: 0.15em 0; }
+  .ProseMirror li > p { margin: 0; }
+  .ProseMirror blockquote {
+    border-left: 3px solid rgb(var(--c-quote-border));
+    padding-left: 1em;
+    color: rgb(var(--c-quote-text));
+    margin: 12px 0;
+    font-style: italic;
+  }
+  .ProseMirror code {
+    background: rgb(var(--c-inline-code-bg));
+    color: rgb(var(--c-inline-code));
+    padding: 0.15em 0.4em;
+    border-radius: 3px;
+    font-family: var(--font-mono, "JetBrains Mono", monospace);
+    font-size: 0.88em;
+    border: 1px solid rgb(var(--c-border-subtle));
+  }
+  .ProseMirror pre {
+    background: rgb(var(--c-code-bg));
+    border: 1px solid rgb(var(--c-border));
+    border-radius: 6px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    margin: 16px 0;
+    font-family: var(--font-mono, "JetBrains Mono", monospace);
+    font-size: 12.5px;
+    line-height: 1.65;
+  }
+  .ProseMirror pre code {
+    background: transparent;
+    color: rgb(var(--c-text));
+    padding: 0;
+    border: 0;
+    font-size: inherit;
+  }
+  .ProseMirror hr {
+    border: none;
+    border-top: 1px solid rgb(var(--c-border));
+    margin: 1.8em 0;
+  }
+  .ProseMirror a.wikilink {
+    color: rgb(var(--c-accent-ink));
+    background: rgb(var(--c-accent-subtle));
+    padding: 0 4px;
+    border-radius: 3px;
+    border-bottom: 1px solid rgb(var(--c-accent));
+    text-decoration: none;
+    cursor: pointer;
+    font-style: normal;
+  }
+  .ProseMirror a.wikilink:hover {
+    background: rgb(var(--c-accent-subtle));
+    filter: brightness(0.96);
+  }
+  .ProseMirror a.wikilink.is-broken {
+    color: rgb(var(--c-text-muted));
+    background: transparent;
+    border-bottom: 1px dashed rgb(var(--c-text-subtle));
+  }
+  .ProseMirror .tag {
+    color: rgb(var(--c-tag));
+    background: rgb(var(--c-tag-soft));
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-family: var(--font-mono, "JetBrains Mono", monospace);
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .ProseMirror mark {
+    background: rgb(var(--c-highlight));
+    color: rgb(var(--c-text));
+    padding: 0 2px;
+    border-radius: 2px;
+  }
+  .ProseMirror .wikilink-typing {
+    color: rgb(var(--c-accent-ink));
+    background: rgb(var(--c-accent-subtle));
+    border-radius: 3px;
+  }
+  .ProseMirror .mention-typing {
+    color: rgb(var(--c-accent-ink));
+    background: rgb(var(--c-accent-subtle));
+    border-radius: 3px;
+  }
+
+  /* Images */
+  .ProseMirror .note-image,
+  .ProseMirror img {
+    max-width: 100%;
+    border-radius: 8px;
+    margin: 0.6em 0;
+    display: block;
+  }
+  .ProseMirror .ProseMirror-selectednode img {
+    outline: 2px solid #7c8cff;
+    outline-offset: 2px;
+  }
+
+  /* Tables */
+  .ProseMirror .note-table,
+  .ProseMirror table {
+    border-collapse: collapse;
+    margin: 0.7em 0;
+    overflow: hidden;
+    width: 100%;
+    table-layout: fixed;
+    font-size: 0.95em;
+  }
+  .ProseMirror table td,
+  .ProseMirror table th {
+    border: 1px solid rgb(var(--c-border));
+    padding: 0.5em 0.7em;
+    vertical-align: top;
+    position: relative;
+  }
+  .ProseMirror table th {
+    background: rgb(var(--c-bg-elevated));
+    color: rgb(var(--c-text));
+    font-weight: 600;
+    text-align: left;
+  }
+  .ProseMirror table .selectedCell {
+    background: rgb(var(--c-accent) / 0.15);
+  }
+  .ProseMirror table .column-resize-handle {
+    position: absolute;
+    right: -2px;
+    top: 0;
+    bottom: -2px;
+    width: 4px;
+    background: rgb(var(--c-accent) / 0.5);
+    pointer-events: none;
+  }
+  .ProseMirror.resize-cursor {
+    cursor: col-resize;
+  }
+
+  /* Code block syntax highlighting — Side palette: purple keys, sage strings, terracotta numbers */
+  .ProseMirror pre code .hljs-keyword,
+  .ProseMirror pre code .hljs-selector-tag,
+  .ProseMirror pre code .hljs-built_in,
+  .ProseMirror pre code .hljs-name,
+  .ProseMirror pre code .hljs-tag { color: #8b5cf6; }
+  .ProseMirror pre code .hljs-string,
+  .ProseMirror pre code .hljs-title,
+  .ProseMirror pre code .hljs-section,
+  .ProseMirror pre code .hljs-attribute,
+  .ProseMirror pre code .hljs-literal,
+  .ProseMirror pre code .hljs-template-tag,
+  .ProseMirror pre code .hljs-template-variable,
+  .ProseMirror pre code .hljs-type,
+  .ProseMirror pre code .hljs-addition { color: #4d7c4f; }
+  .ProseMirror pre code .hljs-comment,
+  .ProseMirror pre code .hljs-quote,
+  .ProseMirror pre code .hljs-meta { color: rgb(var(--c-text-subtle)); font-style: italic; }
+  .ProseMirror pre code .hljs-number,
+  .ProseMirror pre code .hljs-regexp,
+  .ProseMirror pre code .hljs-symbol,
+  .ProseMirror pre code .hljs-variable,
+  .ProseMirror pre code .hljs-template-variable,
+  .ProseMirror pre code .hljs-link,
+  .ProseMirror pre code .hljs-selector-attr,
+  .ProseMirror pre code .hljs-selector-pseudo { color: #c4623a; }
+  .ProseMirror pre code .hljs-function,
+  .ProseMirror pre code .hljs-class .hljs-title,
+  .ProseMirror pre code .hljs-title.function_,
+  .ProseMirror pre code .hljs-title.class_ { color: #4f6b8f; }
+  .ProseMirror pre code .hljs-doctag,
+  .ProseMirror pre code .hljs-strong { font-weight: 700; }
+  .ProseMirror pre code .hljs-emphasis { font-style: italic; }
+  .ProseMirror pre code .hljs-deletion { color: #c4623a; }
+
+  /* React Flow theming */
+  .react-flow__pane { background: rgb(var(--c-bg)); }
+  .react-flow__node { color: rgb(var(--c-text)); }
+  .react-flow__edge-path { stroke: rgb(var(--c-accent)); }
+  .react-flow__handle {
+    background: rgb(var(--c-accent));
+    border: 1.5px solid rgb(var(--c-bg));
+    width: 9px;
+    height: 9px;
+  }
+  .react-flow__controls {
+    background: rgb(var(--c-bg-elevated));
+    border: 1px solid rgb(var(--c-border));
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .react-flow__controls-button {
+    background: transparent;
+    color: rgb(var(--c-text-muted));
+    border-bottom: 1px solid rgb(var(--c-border-subtle));
+    fill: currentColor;
+  }
+  .react-flow__controls-button:hover { background: rgb(var(--c-bg-hover)); color: rgb(var(--c-text)); }
+  .react-flow__minimap {
+    background: rgb(var(--c-bg-elevated)) !important;
+    border-radius: 8px;
+    border: 1px solid rgb(var(--c-border));
+  }
+  .react-flow__minimap-mask { fill: rgb(var(--c-bg) / 0.6); }
+  .react-flow__attribution { display: none; }
+  .react-flow__node.selected > div,
+  .react-flow__node-textCard.selected > div,
+  .react-flow__node-fileCard.selected > div {
+    box-shadow: 0 0 0 2px rgb(var(--c-accent)), 0 8px 30px rgb(0 0 0 / 0.3);
+  }
+  .ProseMirror ul[data-type="taskList"] {
+    list-style: none;
+    padding-left: 0.5em;
+  }
+  .ProseMirror ul[data-type="taskList"] li {
+    display: flex;
+    gap: 0.5em;
+    align-items: flex-start;
+  }
+  .ProseMirror ul[data-type="taskList"] li > label {
+    margin-top: 0.4em;
+  }
+  .ProseMirror ul[data-type="taskList"] input[type="checkbox"] {
+    accent-color: #7c8cff;
+    width: 1em;
+    height: 1em;
+    cursor: pointer;
+  }
+  .ProseMirror ul[data-type="taskList"] li[data-checked="true"] > div {
+    color: rgb(var(--c-text-subtle));
+    text-decoration: line-through;
+  }
+}
