@@ -9,6 +9,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.node.json",
     "build": "npm run typecheck && vite build",
     "package": "npm run build && electron-builder",
+    "package:mac": "npm run build && electron-builder --mac",
+    "package:win": "npm run build && electron-builder --win",
+    "package:linux": "npm run build && electron-builder --linux",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -59,14 +62,59 @@
     "vite-plugin-electron-renderer": "^0.14.6"
   },
   "build": {
-    "appId": "com.secondbrain.app",
-    "productName": "Second Brain",
+    "appId": "com.koushith.side",
+    "productName": "Side",
+    "copyright": "Copyright © 2026 Side",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
     "files": [
       "dist/**/*",
       "dist-electron/**/*"
     ],
+    "asar": true,
     "mac": {
-      "category": "public.app-category.productivity"
-    }
+      "category": "public.app-category.productivity",
+      "target": [
+        { "target": "dmg", "arch": ["arm64", "x64"] },
+        { "target": "zip", "arch": ["arm64", "x64"] }
+      ],
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "identity": null,
+      "icon": "build/icon.icns"
+    },
+    "dmg": {
+      "title": "Side ${version}",
+      "icon": "build/icon.icns",
+      "window": { "width": 540, "height": 380 },
+      "contents": [
+        { "x": 140, "y": 200, "type": "file" },
+        { "x": 400, "y": 200, "type": "link", "path": "/Applications" }
+      ]
+    },
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "shortcutName": "Side"
+    },
+    "linux": {
+      "target": [
+        { "target": "AppImage", "arch": ["x64"] },
+        { "target": "deb", "arch": ["x64"] }
+      ],
+      "category": "Utility",
+      "icon": "build/icon.png"
+    },
+    "publish": null
   }
 }
