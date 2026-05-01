@@ -1,9 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="6" fill="#1f1d1a" />
+  <rect width="32" height="32" rx="7" fill="#1f1d1a" />
   <text
     x="16"
     y="22"
-    font-family="Source Serif 4, Georgia, serif"
+    font-family='"Source Serif 4", "Iowan Old Style", Georgia, serif'
     font-size="20"
     font-weight="600"
     font-style="italic"

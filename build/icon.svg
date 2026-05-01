@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Side app icon. Dark paper-tone square with a serif italic S in the cream paper colour.
+       Uses a path (not a text node) so the icon renders identically without Source Serif loaded. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2a2622" />
+      <stop offset="100%" stop-color="#1a1715" />
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="1024" height="1024" rx="224" fill="url(#bg)" />
+  <!-- Subtle highlight stroke at the top edge -->
+  <rect x="6" y="6" width="1012" height="1012" rx="220" fill="none" stroke="rgba(247,243,236,0.06)" stroke-width="2" />
+
+  <!-- Italic serif S, drawn as a path so font availability doesn't matter.
+       Designed at 1024×1024, optical centre roughly at (512, 530). -->
+  <path
+    fill="#f7f3ec"
+    d="M712 322
+       C 690 268, 624 230, 540 230
+       C 408 230, 320 308, 320 416
+       C 320 506, 388 558, 504 596
+       L 568 618
+       C 644 644, 696 678, 696 740
+       C 696 808, 624 856, 528 856
+       C 432 856, 358 814, 320 740
+       L 286 750
+       C 304 822, 376 884, 484 894
+       C 488 894, 488 894, 492 894
+       L 466 936
+       L 514 936
+       L 540 894
+       C 668 884, 758 800, 758 698
+       C 758 600, 670 548, 562 510
+       L 502 488
+       C 432 462, 384 432, 384 376
+       C 384 318, 446 274, 530 274
+       C 624 274, 686 312, 716 380
+       L 752 372
+       C 738 350, 720 332, 712 322
+       Z
+       M 558 200
+       L 612 132
+       L 562 132
+       L 530 200
+       Z" />
+</svg>

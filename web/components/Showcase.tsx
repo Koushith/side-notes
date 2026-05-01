@@ -1,0 +1,121 @@
+export function Showcase() {
+  return (
+    <section id="preview" className="px-6 py-24">
+      <div className="mx-auto max-w-6xl">
+        <div className="max-w-2xl mb-14">
+          <div className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-accent-ink mb-4">
+            Three views, one vault
+          </div>
+          <h2 className="font-serif text-[44px] md:text-[52px] leading-[1.05] tracking-[-0.025em] font-semibold mb-5">
+            Same notes. Different lenses.
+          </h2>
+          <p className="font-serif text-[18px] leading-relaxed text-ink-2">
+            Switch between writing, exploring connections, and arranging things
+            spatially — without leaving the app. Everything reads from the same folder.
+          </p>
+        </div>
+
+        <div className="grid md:grid-cols-3 gap-5">
+          {/* Connections */}
+          <div className="rounded-[12px] border border-rule bg-paper p-5 mock-window">
+            <div className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-ink-3 mb-3">
+              Connections
+            </div>
+            <div className="aspect-[4/3] bg-paper-2 rounded-[8px] relative overflow-hidden border border-rule-soft">
+              <svg viewBox="0 0 200 150" className="w-full h-full">
+                <line x1="60" y1="40" x2="120" y2="55" stroke="#e0d9c8" strokeWidth="0.8" />
+                <line x1="60" y1="40" x2="40" y2="90" stroke="#e0d9c8" strokeWidth="0.8" />
+                <line x1="120" y1="55" x2="160" y2="100" stroke="#e0d9c8" strokeWidth="0.8" />
+                <line x1="120" y1="55" x2="100" y2="115" stroke="#e0d9c8" strokeWidth="0.8" />
+                <line x1="40" y1="90" x2="100" y2="115" stroke="#e0d9c8" strokeWidth="0.8" />
+                <line x1="100" y1="115" x2="160" y2="100" stroke="#e0d9c8" strokeWidth="0.8" />
+                <circle cx="60" cy="40" r="6" fill="#c4623a" />
+                <circle cx="120" cy="55" r="8" fill="#5a7b56" />
+                <circle cx="40" cy="90" r="5" fill="#4f6b8f" />
+                <circle cx="160" cy="100" r="6" fill="#c4623a" />
+                <circle cx="100" cy="115" r="7" fill="#9a7530" />
+              </svg>
+            </div>
+            <div className="mt-4 font-serif text-[14px] text-ink leading-snug">
+              Hover any node and its neighbours stay bright. Colours follow your folders.
+            </div>
+          </div>
+
+          {/* Canvas */}
+          <div className="rounded-[12px] border border-rule bg-paper p-5 mock-window">
+            <div className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-ink-3 mb-3">
+              Canvas
+            </div>
+            <div
+              className="aspect-[4/3] bg-paper-2 rounded-[8px] relative overflow-hidden border border-rule-soft p-3"
+              style={{
+                backgroundImage: 'radial-gradient(rgba(31,29,26,0.06) 1px, transparent 1px)',
+                backgroundSize: '12px 12px',
+              }}
+            >
+              <div className="absolute top-3 left-3 w-24 h-12 bg-paper border border-rule rounded-md p-1.5">
+                <div className="font-mono text-[7px] uppercase tracking-wide text-ink-3 mb-0.5">Goal</div>
+                <div className="font-serif text-[7px] text-ink leading-tight">Ship the migration.</div>
+              </div>
+              <div className="absolute top-[58%] left-[15%] w-28 h-14 bg-paper border border-link rounded-md p-1.5">
+                <div className="font-serif text-[8px] font-semibold text-ink mb-0.5">Atomic Habits</div>
+                <div className="font-serif text-[7px] text-ink-3 leading-tight">3 highlights · last opened…</div>
+              </div>
+              <div className="absolute top-[20%] right-3 w-24 h-12 bg-paper border border-rule rounded-md p-1.5">
+                <div className="font-mono text-[7px] uppercase tracking-wide text-ink-3 mb-0.5">Note</div>
+                <div className="font-serif text-[7px] text-ink leading-tight">Pair with Sam Friday.</div>
+              </div>
+              <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
+                <path d="M 30 20 C 30 50, 50 50, 50 70" stroke="#c4623a" strokeWidth="0.4" fill="none" />
+                <path d="M 70 25 C 70 50, 60 60, 60 70" stroke="#c4623a" strokeWidth="0.4" fill="none" />
+              </svg>
+            </div>
+            <div className="mt-4 font-serif text-[14px] text-ink leading-snug">
+              Drop notes onto an infinite board. Connect cards. Step back, see shape.
+            </div>
+          </div>
+
+          {/* Daily */}
+          <div className="rounded-[12px] border border-rule bg-paper p-5 mock-window">
+            <div className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-ink-3 mb-3">
+              Daily note
+            </div>
+            <div className="aspect-[4/3] bg-paper-2 rounded-[8px] relative overflow-hidden border border-rule-soft p-3 flex gap-3">
+              <div className="text-center font-serif">
+                <div className="font-mono text-[8px] uppercase tracking-[0.1em] text-ink-3">Fri</div>
+                <div className="text-[28px] font-semibold leading-none tracking-[-0.03em] my-0.5">01</div>
+                <div className="font-mono text-[8px] uppercase tracking-[0.1em] text-ink-3">May 26</div>
+              </div>
+              <div className="flex-1">
+                <div className="font-serif text-[11px] font-semibold leading-tight mb-1.5">
+                  Shipped the index migration.
+                </div>
+                <div className="flex flex-wrap gap-1 mb-2">
+                  <span className="font-sans text-[7px] px-1 py-[1px] rounded-full bg-paper border border-rule text-ink-3">63°F · overcast</span>
+                  <span className="font-sans text-[7px] px-1 py-[1px] rounded-full bg-accent-soft border border-accent text-accent-ink">12-day streak</span>
+                </div>
+                <div className="flex gap-1 mb-1">
+                  {['drained', 'low', 'okay', 'good', 'wired'].map((m) => (
+                    <span
+                      key={m}
+                      className={`flex-1 text-center text-[7px] py-1 rounded border ${
+                        m === 'good'
+                          ? 'bg-accent-soft border-accent text-accent-ink font-semibold'
+                          : 'bg-paper border-rule text-ink-3'
+                      }`}
+                    >
+                      {m}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 font-serif text-[14px] text-ink leading-snug">
+              Date masthead, mood strip, yesterday&apos;s loose ends — all auto-filled.
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
