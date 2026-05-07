@@ -14,6 +14,8 @@ interface VaultState {
   loading: boolean;
   search: string;
   selectedTag: string | null;
+  pinned: Set<string>; // rels of pinned notes (per-vault, persisted)
+  pinnedOnly: boolean; // when true, file tree filters to pinned files
 
   init: () => Promise<void>;
   pickVault: () => Promise<void>;
@@ -33,6 +35,9 @@ interface VaultState {
   setView: (view: ViewMode) => void;
   setSearch: (s: string) => void;
   setSelectedTag: (tag: string | null) => void;
+  togglePin: (rel: string) => void;
+  isPinned: (rel: string) => boolean;
+  setPinnedOnly: (v: boolean) => void;
   getFileTree: () => FileTreeNode[];
   getBacklinks: (rel: string) => VaultFile[];
   getAllTags: () => { tag: string; count: number }[];
@@ -40,6 +45,29 @@ interface VaultState {
   searchContent: (query: string) => Promise<{ rel: string; title: string; snippet: string }[]>;
   getTemplates: () => VaultFile[];
   createFromTemplate: (templateRel: string, newName?: string) => Promise<string>;
+}
+
+const PINNED_KEY_PREFIX = 'side:pinned:';
+
+function loadPinned(vaultPath: string | null): Set<string> {
+  if (!vaultPath) return new Set();
+  try {
+    const raw = localStorage.getItem(PINNED_KEY_PREFIX + vaultPath);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function persistPinned(vaultPath: string | null, pinned: Set<string>) {
+  if (!vaultPath) return;
+  try {
+    localStorage.setItem(PINNED_KEY_PREFIX + vaultPath, JSON.stringify([...pinned]));
+  } catch {
+    /* ignore quota errors */
+  }
 }
 
 async function indexFile(vaultPath: string, rel: string, mtime: number): Promise<VaultFile> {
@@ -72,11 +100,13 @@ export const useVault = create<VaultState>((set, get) => ({
   loading: false,
   search: '',
   selectedTag: null,
+  pinned: new Set(),
+  pinnedOnly: false,
 
   async init() {
     const existing = await api.vault.get();
     if (existing) {
-      set({ vaultPath: existing });
+      set({ vaultPath: existing, pinned: loadPinned(existing) });
       await get().reloadIndex();
       await api.watch.start(existing);
     }
@@ -109,7 +139,13 @@ export const useVault = create<VaultState>((set, get) => ({
   async pickVault() {
     const picked = await api.vault.pick();
     if (!picked) return;
-    set({ vaultPath: picked, files: new Map(), activeFile: null });
+    set({
+      vaultPath: picked,
+      files: new Map(),
+      activeFile: null,
+      pinned: loadPinned(picked),
+      pinnedOnly: false,
+    });
     await get().reloadIndex();
     await api.watch.start(picked);
   },
@@ -117,7 +153,13 @@ export const useVault = create<VaultState>((set, get) => ({
   async closeVault() {
     await api.vault.close();
     await api.watch.stop();
-    set({ vaultPath: null, files: new Map(), activeFile: null });
+    set({
+      vaultPath: null,
+      files: new Map(),
+      activeFile: null,
+      pinned: new Set(),
+      pinnedOnly: false,
+    });
   },
 
   async reloadIndex() {
@@ -227,11 +269,22 @@ export const useVault = create<VaultState>((set, get) => ({
   async renameFile(rel, newRel) {
     const vp = get().vaultPath;
     if (!vp) return;
+    const finalRel = newRel.endsWith('.md') ? newRel : `${newRel}.md`;
     const oldFull = joinPath(vp, rel);
-    const newFull = joinPath(vp, newRel.endsWith('.md') ? newRel : `${newRel}.md`);
+    const newFull = joinPath(vp, finalRel);
     await api.files.rename(oldFull, newFull);
     await get().reloadIndex();
-    set((s) => ({ activeFile: s.activeFile === rel ? newRel : s.activeFile }));
+    set((s) => {
+      const pinned = new Set(s.pinned);
+      if (pinned.delete(rel)) {
+        pinned.add(finalRel);
+        persistPinned(s.vaultPath, pinned);
+      }
+      return {
+        activeFile: s.activeFile === rel ? finalRel : s.activeFile,
+        pinned,
+      };
+    });
   },
 
   async deleteFile(rel) {
@@ -247,7 +300,9 @@ export const useVault = create<VaultState>((set, get) => ({
       if (s.activeFile === rel) {
         activeFile = tabs[tabs.length - 1] ?? null;
       }
-      return { files: m, tabs, activeFile };
+      const pinned = new Set(s.pinned);
+      if (pinned.delete(rel)) persistPinned(s.vaultPath, pinned);
+      return { files: m, tabs, activeFile, pinned };
     });
   },
 
@@ -303,10 +358,18 @@ export const useVault = create<VaultState>((set, get) => ({
     const newFull = joinPath(vp, newRel);
     await api.files.rename(oldFull, newFull);
     await get().reloadIndex();
-    set((s) => ({
-      activeFile: s.activeFile === rel ? newRel : s.activeFile,
-      tabs: s.tabs.map((t) => (t === rel ? newRel : t)),
-    }));
+    set((s) => {
+      const pinned = new Set(s.pinned);
+      if (pinned.delete(rel)) {
+        pinned.add(newRel);
+        persistPinned(s.vaultPath, pinned);
+      }
+      return {
+        activeFile: s.activeFile === rel ? newRel : s.activeFile,
+        tabs: s.tabs.map((t) => (t === rel ? newRel : t)),
+        pinned,
+      };
+    });
   },
 
   setView(view) {
@@ -319,6 +382,24 @@ export const useVault = create<VaultState>((set, get) => ({
 
   setSelectedTag(tag) {
     set({ selectedTag: tag });
+  },
+
+  togglePin(rel) {
+    set((s) => {
+      const next = new Set(s.pinned);
+      if (next.has(rel)) next.delete(rel);
+      else next.add(rel);
+      persistPinned(s.vaultPath, next);
+      return { pinned: next };
+    });
+  },
+
+  isPinned(rel) {
+    return get().pinned.has(rel);
+  },
+
+  setPinnedOnly(v) {
+    set({ pinnedOnly: v });
   },
 
   getFileTree() {

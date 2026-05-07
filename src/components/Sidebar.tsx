@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Sun,
   Book,
@@ -7,6 +7,9 @@ import {
   Search,
   ChevronDown,
   ChevronRight,
+  FilePlus,
+  FolderPlus,
+  LayoutGrid,
 } from 'lucide-react';
 import { useVault } from '@/stores/vault';
 import { FileTree } from './FileTree';
@@ -25,7 +28,11 @@ export function Sidebar({ onOpenPalette }: Props) {
   const setView = useVault((s) => s.setView);
   const activeFile = useVault((s) => s.activeFile);
   const openOrCreateDaily = useVault((s) => s.openOrCreateDaily);
-  const createFile = useVault((s) => s.createFile);
+  const pinnedCount = useVault((s) => s.pinned.size);
+  const pinnedOnly = useVault((s) => s.pinnedOnly);
+  const setPinnedOnly = useVault((s) => s.setPinnedOnly);
+  const setSearch = useVault((s) => s.setSearch);
+  const setSelectedTag = useVault((s) => s.setSelectedTag);
 
   const [tagsOpen, setTagsOpen] = useState(true);
 
@@ -42,13 +49,18 @@ export function Sidebar({ onOpenPalette }: Props) {
   })();
   const isCanvas = activeFile?.endsWith('.canvas') ?? false;
   const isGraph = view === 'graph';
+  const isAll = view === 'all';
   const activeNav = isGraph
     ? 'graph'
+    : isAll
+    ? 'all'
+    : pinnedOnly
+    ? 'pinned'
     : isCanvas
     ? 'canvas'
     : isToday
     ? 'today'
-    : 'all';
+    : null;
 
   return (
     <aside className="sidebar w-60 shrink-0 flex flex-col border-r border-border bg-bg-elevated overflow-hidden">
@@ -89,15 +101,20 @@ export function Sidebar({ onOpenPalette }: Props) {
           icon={<Sun size={14} />}
           label="Today"
           active={activeNav === 'today'}
-          onClick={() => openOrCreateDaily()}
+          onClick={() => {
+            setPinnedOnly(false);
+            openOrCreateDaily();
+          }}
         />
         <NavItem
           icon={<Book size={14} />}
           label="All notes"
           active={activeNav === 'all'}
           onClick={() => {
-            // Just makes sure we're in editor view; the tree below shows all
-            setView('editor');
+            setPinnedOnly(false);
+            setSearch('');
+            setSelectedTag(null);
+            setView('all');
           }}
           count={fileCount}
         />
@@ -105,13 +122,17 @@ export function Sidebar({ onOpenPalette }: Props) {
           icon={<GraphIcon />}
           label="Connections"
           active={activeNav === 'graph'}
-          onClick={() => setView('graph')}
+          onClick={() => {
+            setPinnedOnly(false);
+            setView('graph');
+          }}
         />
         <NavItem
           icon={<CanvasIcon />}
           label="Canvas"
           active={activeNav === 'canvas'}
           onClick={() => {
+            setPinnedOnly(false);
             // Open the first .canvas file we have, or create one
             const first = [...useVault.getState().files.values()].find((f) =>
               f.rel.endsWith('.canvas')
@@ -124,22 +145,22 @@ export function Sidebar({ onOpenPalette }: Props) {
             }
           }}
         />
-        <NavItem icon={<Star size={14} />} label="Pinned" count={0} />
+        <NavItem
+          icon={<Star size={14} />}
+          label="Pinned"
+          active={activeNav === 'pinned'}
+          count={pinnedCount}
+          onClick={() => {
+            setSearch('');
+            setSelectedTag(null);
+            setView('editor');
+            setPinnedOnly(!pinnedOnly);
+          }}
+        />
       </nav>
 
       {/* My vault section header */}
-      <SectionLabel
-        label="My vault"
-        action={
-          <button
-            onClick={() => createFile('Untitled')}
-            className="hover:text-text transition-colors"
-            title="New note"
-          >
-            <Plus size={11} />
-          </button>
-        }
-      />
+      <SectionLabel label="My vault" action={<NewItemMenu />} />
 
       <div className="flex-1 overflow-y-auto">
         <FileTree />
@@ -187,7 +208,7 @@ function NavItem({
     <button
       onClick={onClick}
       className={cn(
-        'w-full flex items-center gap-2.5 px-2.5 py-[6px] rounded-md text-[12.5px] transition-colors',
+        'press nav-indicator w-full flex items-center gap-2.5 px-2.5 py-[6px] rounded-md text-[12.5px]',
         active
           ? 'bg-bg-hover text-text font-medium'
           : 'text-text-muted hover:bg-bg-hover hover:text-text'
@@ -214,6 +235,94 @@ function SectionLabel({
       <span>{label}</span>
       {action && <span className="text-text-subtle">{action}</span>}
     </div>
+  );
+}
+
+function NewItemMenu() {
+  const createFile = useVault((s) => s.createFile);
+  const createCanvas = useVault((s) => s.createCanvas);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('mousedown', handler);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="hover:text-text transition-colors p-0.5"
+        title="New…"
+      >
+        <Plus size={11} />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 w-44 rounded-md border border-border bg-bg-elevated shadow-lg py-1 z-30">
+          <NewItemMenuRow
+            icon={<FilePlus size={13} />}
+            label="New note"
+            onClick={() => {
+              const name = window.prompt('Note name:', 'Untitled');
+              if (name?.trim()) createFile(name.trim()).catch((err) => window.alert((err as Error).message));
+              setOpen(false);
+            }}
+          />
+          <NewItemMenuRow
+            icon={<FolderPlus size={13} />}
+            label="New folder"
+            onClick={() => {
+              const name = window.prompt('Folder name:', 'New folder');
+              if (name?.trim()) {
+                useVault.getState().createFolder(name.trim()).catch((err) => window.alert((err as Error).message));
+              }
+              setOpen(false);
+            }}
+          />
+          <NewItemMenuRow
+            icon={<LayoutGrid size={13} />}
+            label="New canvas"
+            onClick={() => {
+              const name = window.prompt('Canvas name:', 'Untitled canvas');
+              if (name?.trim()) createCanvas(name.trim()).catch((err) => window.alert((err as Error).message));
+              setOpen(false);
+            }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NewItemMenuRow({
+  icon,
+  label,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[12.5px] text-text-muted hover:bg-bg-hover hover:text-text transition-colors normal-case tracking-normal"
+    >
+      <span className="text-text-subtle">{icon}</span>
+      <span>{label}</span>
+    </button>
   );
 }
 

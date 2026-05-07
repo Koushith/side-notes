@@ -14,6 +14,9 @@ import {
   Copy,
   ClipboardCopy,
   ArrowUpRightFromSquare,
+  Pin,
+  PinOff,
+  Star,
 } from 'lucide-react';
 import { useVault } from '@/stores/vault';
 import { cn, basenameNoExt, joinPath } from '@/lib/utils';
@@ -31,8 +34,9 @@ export function FileTree() {
   const folders = useVault((s) => s.folders);
   const search = useVault((s) => s.search).trim().toLowerCase();
   const selectedTag = useVault((s) => s.selectedTag);
+  const pinned = useVault((s) => s.pinned);
+  const pinnedOnly = useVault((s) => s.pinnedOnly);
   const createFile = useVault((s) => s.createFile);
-  const createCanvas = useVault((s) => s.createCanvas);
   const createFolder = useVault((s) => s.createFolder);
   const moveFile = useVault((s) => s.moveFile);
 
@@ -42,8 +46,8 @@ export function FileTree() {
   const [creatingValue, setCreatingValue] = useState('');
   const [rootDragOver, setRootDragOver] = useState(false);
 
-  // Filter mode: when search or tag is active, render flat list
-  if (search || selectedTag) {
+  // Filter mode: when search, tag, or pinnedOnly is active, render flat list
+  if (search || selectedTag || pinnedOnly) {
     let filtered = [...files.values()];
     if (search) {
       filtered = filtered.filter(
@@ -53,11 +57,16 @@ export function FileTree() {
     if (selectedTag) {
       filtered = filtered.filter((f) => f.tags.includes(selectedTag));
     }
+    if (pinnedOnly) {
+      filtered = filtered.filter((f) => pinned.has(f.rel));
+    }
     filtered.sort((a, b) => a.name.localeCompare(b.name));
     return (
       <div className="px-1 py-1">
         {filtered.length === 0 ? (
-          <div className="px-3 py-6 text-center text-xs text-text-subtle">No matches</div>
+          <div className="px-3 py-6 text-center text-xs text-text-subtle">
+            {pinnedOnly ? 'No pinned notes yet' : 'No matches'}
+          </div>
         ) : (
           filtered.map((f) => <FileRow key={f.rel} rel={f.rel} name={f.title || f.name} depth={0} />)
         )}
@@ -87,36 +96,6 @@ export function FileTree() {
         }
       }}
     >
-      <div className="flex gap-1 px-2 mb-1">
-        <ToolbarButton
-          onClick={() => {
-            setCreating({ kind: 'file', parent: '' });
-            setCreatingValue('');
-          }}
-          title="New note"
-        >
-          <FilePlus size={13} />
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => {
-            setCreating({ kind: 'folder', parent: '' });
-            setCreatingValue('');
-          }}
-          title="New folder"
-        >
-          <FolderPlus size={13} />
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => {
-            const name = window.prompt('Canvas name:', 'Untitled canvas');
-            if (name && name.trim()) createCanvas(name.trim()).catch(console.error);
-          }}
-          title="New canvas"
-        >
-          <LayoutGrid size={13} />
-        </ToolbarButton>
-      </div>
-
       {creating && creating.parent === '' && (
         <InlineInput
           icon={creating.kind === 'folder' ? <Folder size={13} /> : <FileText size={13} />}
@@ -170,26 +149,6 @@ function NodeDispatcher(props: NodeDispatchProps) {
     return <FileRow rel={props.node.rel} name={props.node.name} depth={props.depth} />;
   }
   return <FolderNode {...props} />;
-}
-
-function ToolbarButton({
-  children,
-  onClick,
-  title,
-}: {
-  children: React.ReactNode;
-  onClick: () => void;
-  title: string;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      title={title}
-      className="p-1.5 rounded hover:bg-bg-hover text-text-muted hover:text-text transition-colors"
-    >
-      {children}
-    </button>
-  );
 }
 
 function FolderNode({
@@ -389,6 +348,8 @@ function FileRow({ rel, name, depth }: { rel: string; name: string; depth: numbe
   const renameFile = useVault((s) => s.renameFile);
   const deleteFile = useVault((s) => s.deleteFile);
   const vaultPath = useVault((s) => s.vaultPath);
+  const isPinned = useVault((s) => s.pinned.has(rel));
+  const togglePin = useVault((s) => s.togglePin);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const isCanvas = rel.endsWith('.canvas');
 
@@ -400,6 +361,11 @@ function FileRow({ rel, name, depth }: { rel: string; name: string; depth: numbe
           icon: <ArrowUpRightFromSquare size={13} />,
           hint: '↵',
           onClick: () => openFile(rel),
+        },
+        {
+          label: isPinned ? 'Unpin' : 'Pin',
+          icon: isPinned ? <PinOff size={13} /> : <Pin size={13} />,
+          onClick: () => togglePin(rel),
         },
       ],
     },
@@ -489,7 +455,8 @@ function FileRow({ rel, name, depth }: { rel: string; name: string; depth: numbe
         ) : (
           <FileText size={13} className="shrink-0 opacity-70" />
         )}
-        <span className="truncate">{name}</span>
+        <span className="truncate flex-1 text-left">{name}</span>
+        {isPinned && <Star size={11} className="shrink-0 text-accent fill-accent/40 anim-pop" />}
       </button>
       <button
         onClick={(e) => {

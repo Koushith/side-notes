@@ -16,6 +16,12 @@ process.env.APP_ROOT = path.join(__dirname, '..');
 app.setName('Side');
 
 const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL'];
+
+// Vite dev needs eval for HMR; production CSP below is strict. Silence the
+// dev-only "Insecure Content-Security-Policy" console warning.
+if (VITE_DEV_SERVER_URL) {
+  process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
+}
 const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist');
 const MAIN_DIST = path.join(process.env.APP_ROOT, 'dist-electron');
 const ICON_PATH = path.join(process.env.APP_ROOT, 'build', 'icon.png');

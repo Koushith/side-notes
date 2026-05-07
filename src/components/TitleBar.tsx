@@ -12,6 +12,7 @@ import {
   PenSquare,
   Focus,
   Keyboard,
+  Pin,
 } from 'lucide-react';
 import { useVault } from '@/stores/vault';
 import { useTheme } from '@/stores/theme';
@@ -34,6 +35,8 @@ export function TitleBar({ onOpenPalette, onShowShortcuts, onGetEditorHtml }: Pr
   const openOrCreateDaily = useVault((s) => s.openOrCreateDaily);
   const activeFile = useVault((s) => s.activeFile);
   const files = useVault((s) => s.files);
+  const isPinned = useVault((s) => activeFile ? s.pinned.has(activeFile) : false);
+  const togglePin = useVault((s) => s.togglePin);
 
   const mode = useTheme((s) => s.mode);
   const toggleFocus = useUi((s) => s.toggleFocus);
@@ -72,6 +75,23 @@ export function TitleBar({ onOpenPalette, onShowShortcuts, onGetEditorHtml }: Pr
 
       {/* Topbar actions — icon buttons only, like Side */}
       <div className="no-drag flex items-center gap-1">
+        <button
+          onClick={() => activeFile && togglePin(activeFile)}
+          disabled={!activeFile || activeFile.endsWith('.canvas')}
+          title={isPinned ? 'Unpin note' : 'Pin note'}
+          className={cn(
+            'press w-7 h-7 grid place-items-center rounded-md disabled:opacity-40 disabled:cursor-not-allowed',
+            isPinned
+              ? 'text-accent hover:bg-bg-elevated'
+              : 'text-text-muted hover:text-text hover:bg-bg-elevated'
+          )}
+        >
+          <Pin
+            key={isPinned ? 'on' : 'off'}
+            size={14}
+            className={cn(isPinned && 'fill-current anim-pop')}
+          />
+        </button>
         <IconBtn
           onClick={toggleFocus}
           disabled={!activeFile || activeFile.endsWith('.canvas')}
@@ -218,7 +238,7 @@ function IconBtn({
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className="w-7 h-7 grid place-items-center rounded-md text-text-muted hover:text-text hover:bg-bg-elevated disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+      className="press w-7 h-7 grid place-items-center rounded-md text-text-muted hover:text-text hover:bg-bg-elevated disabled:opacity-40 disabled:cursor-not-allowed"
     >
       {children}
     </button>

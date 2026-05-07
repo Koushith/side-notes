@@ -16,7 +16,7 @@ export interface FileTreeNode {
   children?: FileTreeNode[];
 }
 
-export type ViewMode = 'editor' | 'graph';
+export type ViewMode = 'editor' | 'graph' | 'all';
 
 // Mirror of electron/preload.ts API surface (kept in sync manually).
 export interface ApiBridge {

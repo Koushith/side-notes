@@ -9,6 +9,7 @@ import { TabBar } from '@/components/TabBar';
 import { Editor } from '@/components/Editor';
 import { CanvasView } from '@/components/CanvasView';
 import { GraphView } from '@/components/GraphView';
+import { AllNotesView } from '@/components/AllNotesView';
 import { EmptyState } from '@/components/EmptyState';
 import { WelcomeNote } from '@/components/WelcomeNote';
 import { ConnectionsPanel } from '@/components/ConnectionsPanel';
@@ -125,6 +126,8 @@ export default function App() {
                 </div>
               ) : view === 'graph' ? (
                 <GraphView />
+              ) : view === 'all' ? (
+                <AllNotesView />
               ) : activeFile ? (
                 activeFile.endsWith('.canvas') ? (
                   <CanvasView key={activeFile} rel={activeFile} vaultPath={vaultPath} />

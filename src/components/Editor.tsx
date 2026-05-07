@@ -26,9 +26,9 @@ import { EditorBubbleMenu } from './EditorBubbleMenu';
 import { DailyNoteHeader, isDailyNote } from './DailyNoteHeader';
 import { resolveWikilink } from '@/lib/markdown';
 import { api } from '@/lib/api';
-import { joinPath, basenameNoExt } from '@/lib/utils';
+import { joinPath, basenameNoExt, cn } from '@/lib/utils';
 import { saveImageToVault } from '@/lib/images';
-import { Heading1, Heading2, Heading3, List, ListOrdered, CheckSquare, Code, Quote, Minus, Hash, Link2, Image as ImageIcon, Table as TableIcon } from 'lucide-react';
+import { Heading1, Heading2, Heading3, List, ListOrdered, CheckSquare, Code, Quote, Minus, Hash, Link2, Image as ImageIcon, Table as TableIcon, Pin } from 'lucide-react';
 
 const lowlight = createLowlight(common);
 
@@ -43,6 +43,7 @@ export function Editor({ rel, vaultPath }: EditorProps) {
   const setSelectedTag = useVault((s) => s.setSelectedTag);
   const createFile = useVault((s) => s.createFile);
   const saveFile = useVault((s) => s.saveFile);
+  const isPinned = useVault((s) => s.pinned.has(rel));
 
   const [slashState, setSlashState] = useState<SlashMenuState>({
     active: false,
@@ -307,14 +308,45 @@ export function Editor({ rel, vaultPath }: EditorProps) {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {!dailyMode && (
-        <div className="px-16 pt-14 pb-2 max-w-3xl mx-auto w-full">
-          <h1 className="font-serif text-[40px] font-semibold tracking-tight leading-[1.1] text-text">
-            {title}
-          </h1>
-          <div className="font-mono text-[11px] text-text-muted mt-2 flex items-center gap-2 uppercase tracking-wider">
-            <span>{rel}</span>
-            <span className="text-text-subtle">·</span>
-            <span>{file?.tags.length ? `${file.tags.length} tags` : 'no tags yet'}</span>
+        <div className="px-16 pt-14 pb-2">
+          <div className="max-w-3xl mx-auto">
+            <h1 className="font-serif text-[40px] font-semibold tracking-tight leading-[1.1] text-text">
+              {title}
+            </h1>
+            <div className="text-[12.5px] text-text-muted mt-2.5 flex items-center gap-2 flex-wrap">
+              {parentLabel(rel) && (
+                <>
+                  <span>{parentLabel(rel)}</span>
+                  <span className="text-text-subtle">·</span>
+                </>
+              )}
+              <span>Edited {formatRelativeTime(file?.mtime)}</span>
+              {file?.tags.length ? (
+                <>
+                  <span className="text-text-subtle">·</span>
+                  <span className="flex items-center gap-1.5 flex-wrap">
+                    {file.tags.map((t) => (
+                      <button
+                        key={t}
+                        onClick={() => setSelectedTag(t)}
+                        className="font-mono text-[11px] px-1.5 py-[1px] rounded bg-tag-soft text-tag hover:brightness-95"
+                      >
+                        #{t}
+                      </button>
+                    ))}
+                  </span>
+                </>
+              ) : null}
+              {isPinned && (
+                <>
+                  <span className="text-text-subtle">·</span>
+                  <span className="inline-flex items-center gap-1 text-accent">
+                    <Pin size={11} className="fill-current" />
+                    Pinned
+                  </span>
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -425,6 +457,30 @@ function buildSlashCommands(insertImage: (file: File) => Promise<void>): SlashCm
     { title: 'Wikilink', hint: 'Link to another note', keywords: ['link', 'wiki', 'note'], icon: i(Link2), run: (e) => e.chain().focus().insertContent('[[').run() },
     { title: 'Tag', hint: 'Add a #tag', keywords: ['tag', 'hashtag'], icon: i(Hash), run: (e) => e.chain().focus().insertContent('#').run() },
   ];
+}
+
+function parentLabel(rel: string): string {
+  const parts = rel.split('/');
+  if (parts.length < 2) return '';
+  return parts[parts.length - 2];
+}
+
+function formatRelativeTime(ms?: number): string {
+  if (!ms) return 'just now';
+  const diff = Date.now() - ms;
+  if (diff < 60_000) return 'just now';
+  const min = Math.floor(diff / 60_000);
+  if (min < 60) return `${min} min ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr} hr ago`;
+  const day = Math.floor(hr / 24);
+  if (day < 7) return `${day} day${day === 1 ? '' : 's'} ago`;
+  const wk = Math.floor(day / 7);
+  if (wk < 5) return `${wk} wk ago`;
+  const mo = Math.floor(day / 30);
+  if (mo < 12) return `${mo} mo ago`;
+  const yr = Math.floor(day / 365);
+  return `${yr} yr${yr === 1 ? '' : 's'} ago`;
 }
 
 /** Strip a leading `# Title` line from the markdown — used for daily notes where the title

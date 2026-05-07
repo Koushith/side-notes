@@ -40,7 +40,7 @@ export function TabBar() {
             }}
             onDragEnd={() => setDragRel(null)}
             className={cn(
-              'group relative flex items-center gap-1.5 px-3 py-1.5 max-w-52 mx-0.5 rounded-t-md text-[12.5px] cursor-pointer transition-colors',
+              'anim-fade-up group relative flex items-center gap-1.5 px-3 py-1.5 max-w-52 mx-0.5 rounded-t-md text-[12.5px] cursor-pointer',
               isActive
                 ? 'bg-bg text-text border-t border-l border-r border-border -mb-px font-medium'
                 : 'text-text-muted hover:bg-bg-hover hover:text-text'
