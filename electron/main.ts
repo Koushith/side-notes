@@ -11,9 +11,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 process.env.APP_ROOT = path.join(__dirname, '..');
 
 // Brand the dev process. electron-builder handles this for packaged builds
-// (productName = "Side") but during `npm run dev` Electron defaults to its
+// (productName = "SideNotes") but during `npm run dev` Electron defaults to its
 // generic name + atom icon. Set both before anything reads `getPath('userData')`.
-app.setName('Side');
+app.setName('SideNotes');
 
 const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL'];
 
@@ -52,7 +52,7 @@ function createWindow() {
     height: 900,
     minWidth: 900,
     minHeight: 600,
-    title: 'Side',
+    title: 'SideNotes',
     backgroundColor: '#0f1115',
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 14, y: 14 },

@@ -75,6 +75,12 @@ function markSeen() {
   }
 }
 
+/** Mark the current changelog version as already seen without opening the modal.
+ *  Used on first-run so the onboarding tour doesn't have to fight a stacked WhatsNew. */
+export function markWhatsNewSeen() {
+  markSeen();
+}
+
 export function shouldShowWhatsNew(): boolean {
   try {
     return localStorage.getItem(KEY) !== CHANGELOG[0].version;
@@ -113,7 +119,7 @@ export function WhatsNew({ open, onClose }: Props) {
               Release notes
             </div>
             <h2 className="font-serif text-[26px] font-semibold tracking-tight text-text leading-tight">
-              What's new in Side
+              What's new in SideNotes
             </h2>
           </div>
           <button
@@ -175,7 +181,7 @@ export function WhatsNew({ open, onClose }: Props) {
         {/* Footer */}
         <div className="px-6 py-4 border-t border-border flex items-center justify-between">
           <span className="font-mono text-[11px] text-text-subtle">
-            Side v{CHANGELOG[0].version}
+            SideNotes v{CHANGELOG[0].version}
           </span>
           <button
             onClick={close}

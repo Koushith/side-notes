@@ -16,7 +16,7 @@ export function EmptyState({ onOpenVaultSwitcher }: { onOpenVaultSwitcher?: () =
               S
             </div>
             <h1 className="font-serif text-[40px] font-semibold tracking-tight leading-[1.05] mb-4 text-text">
-              Side.
+              SideNotes.
             </h1>
             <p className="font-serif text-text-muted leading-relaxed max-w-md mx-auto">
               A quiet, local-first second brain. Your notes stay as plain markdown files

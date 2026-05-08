@@ -16,7 +16,7 @@ import { ConnectionsPanel } from '@/components/ConnectionsPanel';
 import { CommandPalette } from '@/components/CommandPalette';
 import { Onboarding } from '@/components/Onboarding';
 import { ShortcutsHelp } from '@/components/ShortcutsHelp';
-import { WhatsNew, shouldShowWhatsNew } from '@/components/WhatsNew';
+import { WhatsNew, shouldShowWhatsNew, markWhatsNewSeen } from '@/components/WhatsNew';
 import { VaultSwitcher } from '@/components/VaultSwitcher';
 
 export default function App() {
@@ -35,10 +35,18 @@ export default function App() {
 
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const [whatsNewOpen, setWhatsNewOpen] = useState(() => shouldShowWhatsNew());
-  const [vaultSwitcherOpen, setVaultSwitcherOpen] = useState(false);
   const onboardingCompleted = useOnboarding((s) => s.completed);
   const startOnboarding = useOnboarding((s) => s.start);
+  // First-run users see the onboarding tour, not the changelog. Mark the current
+  // changelog as "seen" so it stays quiet — they'll only see future updates.
+  const [whatsNewOpen, setWhatsNewOpen] = useState(() => {
+    if (!onboardingCompleted) {
+      markWhatsNewSeen();
+      return false;
+    }
+    return shouldShowWhatsNew();
+  });
+  const [vaultSwitcherOpen, setVaultSwitcherOpen] = useState(false);
 
   useEffect(() => {
     init();

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Patches node_modules/electron/.../Info.plist so the macOS dock label and
-// Cmd-Tab switcher read "Side" instead of "Electron" while running `npm run dev`.
+// Cmd-Tab switcher read "SideNotes" instead of "Electron" while running `npm run dev`.
 // electron-builder produces a properly-branded bundle for packaged builds — this
 // script only addresses the in-development experience.
 //
@@ -10,7 +10,7 @@ import { execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-const APP_NAME = 'Side';
+const APP_NAME = 'SideNotes';
 
 if (process.platform !== 'darwin') {
   process.exit(0);

@@ -37,7 +37,7 @@ export function Sidebar({ onOpenPalette, onOpenVaultSwitcher }: Props) {
 
   const [tagsOpen, setTagsOpen] = useState(true);
 
-  const vaultName = vaultPath?.split(/[\\/]/).pop() ?? 'Side';
+  const vaultName = vaultPath?.split(/[\\/]/).pop() ?? 'SideNotes';
 
   // Determine which nav item is active based on the current view + active file
   const isToday = (() => {

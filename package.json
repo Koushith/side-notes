@@ -63,10 +63,10 @@
     "vite-plugin-electron-renderer": "^0.14.6"
   },
   "build": {
-    "appId": "com.koushith.side",
-    "productName": "Side",
-    "copyright": "Copyright © 2026 Side",
-    "artifactName": "Side-${version}-${os}-${arch}.${ext}",
+    "appId": "com.koushith.sidenotes",
+    "productName": "SideNotes",
+    "copyright": "Copyright © 2026 SideNotes",
+    "artifactName": "SideNotes-${version}-${os}-${arch}.${ext}",
     "directories": {
       "output": "release",
       "buildResources": "build"
@@ -88,7 +88,7 @@
       "icon": "build/icon.icns"
     },
     "dmg": {
-      "title": "Side ${version}",
+      "title": "SideNotes ${version}",
       "icon": "build/icon.icns",
       "window": { "width": 540, "height": 380 },
       "contents": [
@@ -107,8 +107,8 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "perMachine": false,
-      "shortcutName": "Side",
-      "artifactName": "Side-Setup-${version}-${arch}.${ext}"
+      "shortcutName": "SideNotes",
+      "artifactName": "SideNotes-Setup-${version}-${arch}.${ext}"
     },
     "linux": {
       "target": [

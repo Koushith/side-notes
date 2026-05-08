@@ -201,7 +201,7 @@ function BrandVisual() {
       </div>
       <div className="font-serif">
         <div className="text-[36px] font-semibold tracking-tight leading-none text-text">
-          Side.
+          SideNotes.
         </div>
         <div className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-muted mt-2">
           A second brain · v0.1
