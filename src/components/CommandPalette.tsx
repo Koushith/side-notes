@@ -113,7 +113,7 @@ export function CommandPalette({ open, onClose, onShowShortcuts, onShowWhatsNew,
     const all: Hit[] = [
       {
         kind: 'action',
-        title: 'New note',
+        title: 'New Note',
         hint: '⌘N',
         icon: <Plus size={14} />,
         run: () => {
@@ -123,7 +123,7 @@ export function CommandPalette({ open, onClose, onShowShortcuts, onShowWhatsNew,
       },
       {
         kind: 'action',
-        title: 'New canvas',
+        title: 'New Canvas',
         hint: 'Whiteboard with cards',
         icon: <LayoutGrid size={14} />,
         run: async () => {
@@ -135,7 +135,7 @@ export function CommandPalette({ open, onClose, onShowShortcuts, onShowWhatsNew,
       },
       {
         kind: 'action',
-        title: 'Open today',
+        title: 'Open Today',
         hint: 'Daily note',
         icon: <Calendar size={14} />,
         run: async () => {
@@ -145,7 +145,7 @@ export function CommandPalette({ open, onClose, onShowShortcuts, onShowWhatsNew,
       },
       {
         kind: 'action',
-        title: 'Open graph view',
+        title: 'Open Graph View',
         hint: '⌘2',
         icon: <Network size={14} />,
         run: () => {
@@ -155,7 +155,7 @@ export function CommandPalette({ open, onClose, onShowShortcuts, onShowWhatsNew,
       },
       {
         kind: 'action',
-        title: 'Switch vault',
+        title: 'Switch Vault',
         icon: <FolderOpen size={14} />,
         run: () => {
           onClose();
@@ -164,7 +164,7 @@ export function CommandPalette({ open, onClose, onShowShortcuts, onShowWhatsNew,
       },
       {
         kind: 'action',
-        title: 'Keyboard shortcuts',
+        title: 'Keyboard Shortcuts',
         hint: '⌘/',
         icon: <Keyboard size={14} />,
         run: () => {
@@ -174,7 +174,7 @@ export function CommandPalette({ open, onClose, onShowShortcuts, onShowWhatsNew,
       },
       {
         kind: 'action',
-        title: 'Show the tour again',
+        title: 'Show the Tour Again',
         icon: <BookOpen size={14} />,
         run: () => {
           onClose();

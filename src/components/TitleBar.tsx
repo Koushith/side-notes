@@ -80,7 +80,7 @@ export function TitleBar({ onOpenPalette, onShowShortcuts, onShowWhatsNew, onGet
         <button
           onClick={() => activeFile && togglePin(activeFile)}
           disabled={!activeFile || activeFile.endsWith('.canvas')}
-          title={isPinned ? 'Unpin note' : 'Pin note'}
+          title={isPinned ? 'Unpin Note' : 'Pin Note'}
           className={cn(
             'press w-7 h-7 grid place-items-center rounded-md disabled:opacity-40 disabled:cursor-not-allowed',
             isPinned
@@ -97,19 +97,19 @@ export function TitleBar({ onOpenPalette, onShowShortcuts, onShowWhatsNew, onGet
         <IconBtn
           onClick={toggleFocus}
           disabled={!activeFile || activeFile.endsWith('.canvas')}
-          title="Focus mode (⌘.)"
+          title="Focus Mode (⌘.)"
         >
           <Focus size={14} />
         </IconBtn>
         <IconBtn
           onClick={onShowWhatsNew}
-          title="What's new"
+          title="What's New"
         >
           <Megaphone size={14} />
         </IconBtn>
         <IconBtn
           onClick={onShowShortcuts}
-          title="Keyboard shortcuts (⌘/)"
+          title="Keyboard Shortcuts (⌘/)"
         >
           <Keyboard size={14} />
         </IconBtn>
@@ -128,21 +128,21 @@ export function TitleBar({ onOpenPalette, onShowShortcuts, onShowWhatsNew, onGet
             setThemeOpen((v) => !v);
           }}
           className="w-7 h-7 grid place-items-center rounded-md text-text-muted hover:text-text hover:bg-bg-elevated transition-colors"
-          title="Theme & mode"
+          title="Theme & Mode"
         >
           {mode === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
         </button>
         <IconBtn
           onClick={() => openOrCreateDaily()}
           disabled={!vaultPath}
-          title="Today's daily note (⌘D)"
+          title="Today's Daily Note (⌘D)"
         >
           <Calendar size={14} />
         </IconBtn>
         <IconBtn
           onClick={() => createFile('Untitled')}
           disabled={!vaultPath}
-          title="New note (⌘N)"
+          title="New Note (⌘N)"
         >
           <Plus size={14} />
         </IconBtn>
@@ -205,7 +205,7 @@ export function TitleBar({ onOpenPalette, onShowShortcuts, onShowWhatsNew, onGet
                 onOpenPalette();
               }}
             >
-              Insert from template…
+              Insert from Template…
             </Item>
             <div className="my-1 border-t border-border" />
             <Item
@@ -215,7 +215,7 @@ export function TitleBar({ onOpenPalette, onShowShortcuts, onShowWhatsNew, onGet
                 useVault.getState().closeVault();
               }}
             >
-              Close vault
+              Close Vault
             </Item>
           </div>
         )}

@@ -173,7 +173,7 @@ function FolderNode({
       label: 'Create',
       items: [
         {
-          label: 'New note here',
+          label: 'New Note Here',
           icon: <FilePlus size={13} />,
           onClick: () => {
             setCreating({ kind: 'file', parent: node.rel });
@@ -182,7 +182,7 @@ function FolderNode({
           },
         },
         {
-          label: 'New subfolder',
+          label: 'New Subfolder',
           icon: <FolderPlus size={13} />,
           onClick: () => {
             setCreating({ kind: 'folder', parent: node.rel });
@@ -203,7 +203,7 @@ function FolderNode({
           },
         },
         {
-          label: 'Copy folder path',
+          label: 'Copy Folder Path',
           icon: <ClipboardCopy size={13} />,
           onClick: () => {
             navigator.clipboard.writeText(node.rel).catch(() => {});
@@ -214,7 +214,7 @@ function FolderNode({
     {
       items: [
         {
-          label: 'Delete folder',
+          label: 'Delete Folder',
           icon: <Trash2 size={13} />,
           danger: true,
           onClick: () => {
@@ -380,7 +380,7 @@ function FileRow({ rel, name, depth }: { rel: string; name: string; depth: numbe
           },
         },
         {
-          label: 'Copy file path',
+          label: 'Copy File Path',
           icon: <ClipboardCopy size={13} />,
           onClick: () => {
             navigator.clipboard.writeText(rel).catch(() => {});

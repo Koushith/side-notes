@@ -28,7 +28,7 @@ export function WelcomeNote() {
               className="inline-flex items-center gap-1.5 px-4 py-2 text-[13px] rounded-md bg-accent text-bg hover:bg-accent-hover font-medium"
             >
               <Plus size={13} />
-              New note
+              New Note
             </button>
             <button
               onClick={() => openOrCreateDaily()}

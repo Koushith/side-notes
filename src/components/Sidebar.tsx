@@ -270,7 +270,7 @@ function NewItemMenu() {
         <div className="absolute right-0 top-full mt-1 w-44 rounded-md border border-border bg-bg-elevated shadow-lg py-1 z-30">
           <NewItemMenuRow
             icon={<FilePlus size={13} />}
-            label="New note"
+            label="New Note"
             onClick={() => {
               const name = window.prompt('Note name:', 'Untitled');
               if (name?.trim()) createFile(name.trim()).catch((err) => window.alert((err as Error).message));
@@ -279,7 +279,7 @@ function NewItemMenu() {
           />
           <NewItemMenuRow
             icon={<FolderPlus size={13} />}
-            label="New folder"
+            label="New Folder"
             onClick={() => {
               const name = window.prompt('Folder name:', 'New folder');
               if (name?.trim()) {
@@ -290,7 +290,7 @@ function NewItemMenu() {
           />
           <NewItemMenuRow
             icon={<LayoutGrid size={13} />}
-            label="New canvas"
+            label="New Canvas"
             onClick={() => {
               const name = window.prompt('Canvas name:', 'Untitled canvas');
               if (name?.trim()) createCanvas(name.trim()).catch((err) => window.alert((err as Error).message));
