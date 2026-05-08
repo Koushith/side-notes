@@ -2,6 +2,10 @@
   "name": "second-brain",
   "version": "0.2.0",
   "description": "A friendly second brain for everyone — Obsidian-style, Notion-easy.",
+  "author": {
+    "name": "Koushith",
+    "email": "koushith97@gmail.com"
+  },
   "main": "dist-electron/main.js",
   "type": "module",
   "scripts": {
