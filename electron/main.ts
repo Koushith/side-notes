@@ -32,7 +32,12 @@ let win: BrowserWindow | null = null;
 let watcher: FSWatcher | null = null;
 let currentVault: string | null = null;
 
-async function readSettings(): Promise<{ vaultPath?: string }> {
+interface Settings {
+  vaultPath?: string;
+  recentVaults?: string[];
+}
+
+async function readSettings(): Promise<Settings> {
   try {
     const raw = await fs.readFile(SETTINGS_PATH, 'utf-8');
     return JSON.parse(raw);
@@ -41,7 +46,7 @@ async function readSettings(): Promise<{ vaultPath?: string }> {
   }
 }
 
-async function writeSettings(data: Record<string, unknown>) {
+async function writeSettings(data: Settings) {
   await fs.mkdir(path.dirname(SETTINGS_PATH), { recursive: true });
   await fs.writeFile(SETTINGS_PATH, JSON.stringify(data, null, 2));
 }
@@ -139,10 +144,9 @@ app.on('activate', () => {
 });
 
 // ---- IPC: Vault ----
-function addToRecents(settings: Record<string, unknown>, vaultPath: string): string[] {
-  const existing = Array.isArray(settings.recentVaults) ? (settings.recentVaults as string[]) : [];
-  const next = [vaultPath, ...existing.filter((p) => p !== vaultPath)].slice(0, 8);
-  return next;
+function addToRecents(settings: Settings, vaultPath: string): string[] {
+  const existing = settings.recentVaults ?? [];
+  return [vaultPath, ...existing.filter((p) => p !== vaultPath)].slice(0, 8);
 }
 
 ipcMain.handle('vault:pick', async () => {
