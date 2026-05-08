@@ -2,12 +2,6 @@ import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 
-export interface WikilinkCandidate {
-  rel: string;
-  title: string;
-  name: string;
-}
-
 export interface WikilinkSuggestState {
   active: boolean;
   query: string;

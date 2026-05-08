@@ -89,12 +89,6 @@ export const Wikilink = Node.create<WikilinkOptions>({
     };
   },
 
-  addProseMirrorPlugins() {
-    const onClick = this.options.onClick;
-    if (!onClick) return [];
-    return [];
-  },
-
   // tiptap-markdown reads this to know how to serialize the node back to plain `[[X]]`
   addStorage() {
     return {

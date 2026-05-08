@@ -24,6 +24,8 @@ export interface ApiBridge {
     pick: () => Promise<string | null>;
     get: () => Promise<string | null>;
     close: () => Promise<boolean>;
+    getRecents: () => Promise<string[]>;
+    openRecent: (path: string) => Promise<string | null>;
   };
   files: {
     list: (vaultPath: string) => Promise<{ path: string; rel: string; mtime: number }[]>;

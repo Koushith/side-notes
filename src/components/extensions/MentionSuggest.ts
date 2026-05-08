@@ -139,8 +139,3 @@ export function commitMention(
       .run();
   }
 }
-
-export function dismissMention(editor: import('@tiptap/core').Editor) {
-  const view = editor.view;
-  view.dispatch(view.state.tr.setMeta(pluginKey, { active: false, query: '', range: null }));
-}

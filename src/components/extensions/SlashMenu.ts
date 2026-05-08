@@ -2,13 +2,6 @@ import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 
-export interface SlashCommand {
-  title: string;
-  hint?: string;
-  keywords?: string[];
-  run: (editor: import('@tiptap/core').Editor) => void;
-}
-
 export interface SlashMenuState {
   active: boolean;
   query: string;

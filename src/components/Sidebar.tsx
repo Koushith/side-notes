@@ -7,6 +7,7 @@ import {
   Search,
   ChevronDown,
   ChevronRight,
+  ChevronsUpDown,
   FilePlus,
   FolderPlus,
   LayoutGrid,
@@ -18,11 +19,11 @@ import { cn } from '@/lib/utils';
 
 interface Props {
   onOpenPalette: () => void;
+  onOpenVaultSwitcher: () => void;
 }
 
-export function Sidebar({ onOpenPalette }: Props) {
+export function Sidebar({ onOpenPalette, onOpenVaultSwitcher }: Props) {
   const vaultPath = useVault((s) => s.vaultPath);
-  const closeVault = useVault((s) => s.closeVault);
   const fileCount = useVault((s) => s.files.size);
   const view = useVault((s) => s.view);
   const setView = useVault((s) => s.setView);
@@ -64,24 +65,20 @@ export function Sidebar({ onOpenPalette }: Props) {
 
   return (
     <aside className="sidebar w-60 shrink-0 flex flex-col border-r border-border bg-bg-elevated overflow-hidden">
-      {/* Brand */}
-      <div className="flex items-center gap-2.5 px-4 pt-[18px] pb-3.5 border-b border-border-subtle">
-        <button
-          onClick={() => {
-            if (window.confirm('Close vault and pick another?')) closeVault();
-          }}
-          title={vaultPath ?? ''}
-          className="w-[22px] h-[22px] rounded-md bg-text text-bg grid place-items-center font-serif font-semibold italic text-[13px] shrink-0"
-        >
+      {/* Vault header — click to switch vault */}
+      <button
+        onClick={onOpenVaultSwitcher}
+        title="Switch vault"
+        className="flex items-center gap-2.5 px-4 pt-[18px] pb-3.5 border-b border-border-subtle w-full hover:bg-bg-hover transition-colors group"
+      >
+        <span className="w-[22px] h-[22px] rounded-md bg-text text-bg grid place-items-center font-serif font-semibold italic text-[13px] shrink-0">
           S
-        </button>
-        <div className="font-serif text-[16px] font-semibold tracking-tight text-text truncate flex-1 text-left">
-          {vaultName}
-        </div>
-        <span className="font-mono text-[10.5px] text-text-muted uppercase tracking-[0.08em] shrink-0">
-          v0.1
         </span>
-      </div>
+        <span className="font-serif text-[16px] font-semibold tracking-tight text-text truncate flex-1 text-left">
+          {vaultName}
+        </span>
+        <ChevronsUpDown size={13} className="text-text-subtle shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+      </button>
 
       {/* Search */}
       <button

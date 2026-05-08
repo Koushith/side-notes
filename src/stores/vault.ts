@@ -1,11 +1,12 @@
-import { create } from 'zustand';
 import { api } from '@/lib/api';
 import { parseNote } from '@/lib/markdown';
 import { basenameNoExt, joinPath } from '@/lib/utils';
-import type { VaultFile, FileTreeNode, ViewMode } from '@/types';
+import type { FileTreeNode, VaultFile, ViewMode } from '@/types';
+import { create } from 'zustand';
 
 interface VaultState {
   vaultPath: string | null;
+  recentVaults: string[];
   files: Map<string, VaultFile>; // keyed by rel
   folders: Set<string>; // explicitly tracked rel folders (so empty folders show)
   activeFile: string | null; // rel
@@ -19,6 +20,7 @@ interface VaultState {
 
   init: () => Promise<void>;
   pickVault: () => Promise<void>;
+  openVault: (path: string) => Promise<void>;
   closeVault: () => Promise<void>;
   reloadIndex: () => Promise<void>;
   openFile: (rel: string) => void;
@@ -92,6 +94,7 @@ async function indexFile(vaultPath: string, rel: string, mtime: number): Promise
 
 export const useVault = create<VaultState>((set, get) => ({
   vaultPath: null,
+  recentVaults: [],
   files: new Map(),
   folders: new Set(),
   activeFile: null,
@@ -104,7 +107,8 @@ export const useVault = create<VaultState>((set, get) => ({
   pinnedOnly: false,
 
   async init() {
-    const existing = await api.vault.get();
+    const [existing, recents] = await Promise.all([api.vault.get(), api.vault.getRecents()]);
+    set({ recentVaults: recents });
     if (existing) {
       set({ vaultPath: existing, pinned: loadPinned(existing) });
       await get().reloadIndex();
@@ -130,7 +134,23 @@ export const useVault = create<VaultState>((set, get) => ({
         set((s) => {
           const m = new Map(s.files);
           m.delete(rel);
-          return { files: m, activeFile: s.activeFile === rel ? null : s.activeFile };
+          const tabs = s.tabs.filter((t) => t !== rel);
+          return { files: m, tabs, activeFile: s.activeFile === rel ? (tabs[tabs.length - 1] ?? null) : s.activeFile };
+        });
+      } else if (e.type === 'addDir') {
+        const rel = e.path.replace(vp, '').replace(/^[\\/]+/, '');
+        if (rel)
+          set((s) => {
+            const folders = new Set(s.folders);
+            folders.add(rel);
+            return { folders };
+          });
+      } else if (e.type === 'unlinkDir') {
+        const rel = e.path.replace(vp, '').replace(/^[\\/]+/, '');
+        set((s) => {
+          const folders = new Set(s.folders);
+          folders.delete(rel);
+          return { folders };
         });
       }
     });
@@ -146,8 +166,20 @@ export const useVault = create<VaultState>((set, get) => ({
       pinned: loadPinned(picked),
       pinnedOnly: false,
     });
+    const recents = await api.vault.getRecents();
+    set({ vaultPath: picked, recentVaults: recents, files: new Map(), activeFile: null, tabs: [] });
     await get().reloadIndex();
     await api.watch.start(picked);
+  },
+
+  async openVault(vaultPath) {
+    const confirmed = await api.vault.openRecent(vaultPath);
+    if (!confirmed) return;
+    if (get().vaultPath) await api.watch.stop();
+    const recents = await api.vault.getRecents();
+    set({ vaultPath: confirmed, recentVaults: recents, files: new Map(), activeFile: null, tabs: [] });
+    await get().reloadIndex();
+    await api.watch.start(confirmed);
   },
 
   async closeVault() {
@@ -261,7 +293,8 @@ export const useVault = create<VaultState>((set, get) => ({
     set((s) => {
       const m = new Map(s.files);
       m.set(rel, indexed);
-      return { files: m, activeFile: rel, view: 'editor' };
+      const tabs = s.tabs.includes(rel) ? s.tabs : [...s.tabs, rel];
+      return { files: m, activeFile: rel, view: 'editor', tabs };
     });
     return rel;
   },
@@ -451,7 +484,9 @@ export const useVault = create<VaultState>((set, get) => ({
     const targetName = basenameNoExt(rel).toLowerCase();
     return [...get().files.values()].filter((f) => {
       if (f.rel === rel) return false;
-      return f.links.some((l) => l.toLowerCase() === targetName || l.toLowerCase() === rel.replace(/\.md$/i, '').toLowerCase());
+      return f.links.some(
+        (l) => l.toLowerCase() === targetName || l.toLowerCase() === rel.replace(/\.md$/i, '').toLowerCase()
+      );
     });
   },
 
@@ -460,9 +495,7 @@ export const useVault = create<VaultState>((set, get) => ({
     for (const f of get().files.values()) {
       for (const t of f.tags) counts.set(t, (counts.get(t) ?? 0) + 1);
     }
-    return [...counts.entries()]
-      .map(([tag, count]) => ({ tag, count }))
-      .sort((a, b) => b.count - a.count);
+    return [...counts.entries()].map(([tag, count]) => ({ tag, count })).sort((a, b) => b.count - a.count);
   },
 
   async openOrCreateDaily() {
@@ -490,7 +523,8 @@ export const useVault = create<VaultState>((set, get) => ({
     set((s) => {
       const m2 = new Map(s.files);
       m2.set(rel, indexed);
-      return { files: m2, activeFile: rel, view: 'editor' };
+      const tabs = s.tabs.includes(rel) ? s.tabs : [...s.tabs, rel];
+      return { files: m2, activeFile: rel, view: 'editor', tabs };
     });
   },
 
@@ -554,7 +588,10 @@ export const useVault = create<VaultState>((set, get) => ({
           bodyHit = true;
           const start = Math.max(0, idx - 40);
           const end = Math.min(noFm.length, idx + q.length + 60);
-          snippet = (start > 0 ? '…' : '') + noFm.slice(start, end).replace(/\n+/g, ' ').trim() + (end < noFm.length ? '…' : '');
+          snippet =
+            (start > 0 ? '…' : '') +
+            noFm.slice(start, end).replace(/\n+/g, ' ').trim() +
+            (end < noFm.length ? '…' : '');
         }
       } catch {
         /* skip */

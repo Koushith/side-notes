@@ -5,6 +5,8 @@ const api = {
     pick: () => ipcRenderer.invoke('vault:pick') as Promise<string | null>,
     get: () => ipcRenderer.invoke('vault:get') as Promise<string | null>,
     close: () => ipcRenderer.invoke('vault:close') as Promise<boolean>,
+    getRecents: () => ipcRenderer.invoke('vault:getRecents') as Promise<string[]>,
+    openRecent: (p: string) => ipcRenderer.invoke('vault:openRecent', p) as Promise<string | null>,
   },
   files: {
     list: (vaultPath: string) =>

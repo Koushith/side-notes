@@ -3,7 +3,7 @@ import { useVault } from '@/stores/vault';
 import { useOnboarding } from '@/stores/onboarding';
 import { TipOfTheDay } from './TipOfTheDay';
 
-export function EmptyState() {
+export function EmptyState({ onOpenVaultSwitcher }: { onOpenVaultSwitcher?: () => void }) {
   const pickVault = useVault((s) => s.pickVault);
   const startTour = useOnboarding((s) => s.start);
 
@@ -34,7 +34,7 @@ export function EmptyState() {
 
           <div className="flex flex-wrap items-center justify-center gap-3 mb-10">
             <button
-              onClick={pickVault}
+              onClick={onOpenVaultSwitcher ?? pickVault}
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md bg-accent text-bg font-medium hover:bg-accent-hover transition-colors"
             >
               <FolderOpen size={16} />

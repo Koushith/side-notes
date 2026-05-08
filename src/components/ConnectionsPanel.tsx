@@ -1,11 +1,21 @@
 import { useEffect, useMemo, useState } from 'react';
+import { ChevronDown, ChevronRight, PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { useVault } from '@/stores/vault';
 import { api } from '@/lib/api';
 import { resolveWikilink } from '@/lib/markdown';
-import { basenameNoExt } from '@/lib/utils';
+import { basenameNoExt, joinPath } from '@/lib/utils';
+import { cn } from '@/lib/utils';
+
+interface Heading { level: number; text: string }
+
+const COLLAPSED_KEY = 'side.connections.collapsed';
+function readCollapsed() {
+  try { return localStorage.getItem(COLLAPSED_KEY) === '1'; } catch { return false; }
+}
 
 export function ConnectionsPanel() {
   const activeFile = useVault((s) => s.activeFile);
+  const vaultPath = useVault((s) => s.vaultPath);
   const files = useVault((s) => s.files);
   const openFile = useVault((s) => s.openFile);
   const setSelectedTag = useVault((s) => s.setSelectedTag);
@@ -13,6 +23,28 @@ export function ConnectionsPanel() {
   const filesArr = useMemo(() => [...files.values()], [files]);
   const file = activeFile ? files.get(activeFile) ?? null : null;
   const targetName = (file?.title || file?.name || '').toLowerCase();
+
+  const [collapsed, setCollapsed] = useState(readCollapsed);
+  function toggleCollapsed() {
+    const next = !collapsed;
+    try { localStorage.setItem(COLLAPSED_KEY, next ? '1' : '0'); } catch { /* ignore */ }
+    setCollapsed(next);
+  }
+
+  // Outline state
+  const [outlineOpen, setOutlineOpen] = useState(true);
+  const [headings, setHeadings] = useState<Heading[]>([]);
+  useEffect(() => {
+    if (!activeFile || !vaultPath) { setHeadings([]); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const raw = await api.files.read(joinPath(vaultPath, activeFile));
+        if (!cancelled) setHeadings(extractHeadings(raw));
+      } catch { setHeadings([]); }
+    })();
+    return () => { cancelled = true; };
+  }, [activeFile, vaultPath, file?.mtime]);
 
   const backlinks = useMemo(() => {
     if (!file || !activeFile) return [];
@@ -71,14 +103,73 @@ export function ConnectionsPanel() {
   const incomingCount = backlinks.length;
   const outgoingCount = outgoing.length;
 
+  if (collapsed) {
+    return (
+      <aside className="w-9 shrink-0 border-l border-border bg-bg-elevated flex flex-col items-center pt-3 gap-2">
+        <button
+          onClick={toggleCollapsed}
+          title="Expand panel"
+          className="p-1.5 rounded-md text-text-muted hover:text-text hover:bg-bg-hover transition-colors"
+        >
+          <PanelRightOpen size={14} />
+        </button>
+      </aside>
+    );
+  }
+
   return (
     <aside className="w-[280px] shrink-0 border-l border-border bg-bg-elevated overflow-y-auto">
-      <div className="px-4 pt-4 pb-3 border-b border-border-subtle">
-        <div className="font-serif text-[14px] font-semibold text-text">Connections</div>
-        <div className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-text-muted mt-0.5">
-          {incomingCount} incoming · {outgoingCount} outgoing
+      <div className="px-4 pt-4 pb-3 border-b border-border-subtle flex items-start justify-between gap-2">
+        <div>
+          <div className="font-serif text-[14px] font-semibold text-text">Connections</div>
+          <div className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-text-muted mt-0.5">
+            {incomingCount} incoming · {outgoingCount} outgoing
+          </div>
         </div>
+        <button
+          onClick={toggleCollapsed}
+          title="Collapse panel"
+          className="mt-0.5 p-1 rounded-md text-text-muted hover:text-text hover:bg-bg-hover transition-colors shrink-0"
+        >
+          <PanelRightClose size={14} />
+        </button>
       </div>
+
+      {/* Outline */}
+      {headings.length > 0 && (
+        <div className="border-b border-border-subtle">
+          <button
+            onClick={() => setOutlineOpen((v) => !v)}
+            className="w-full px-4 pt-3.5 pb-2 flex items-center justify-between font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-muted hover:text-text transition-colors"
+          >
+            <span>Outline</span>
+            <span className="flex items-center gap-1.5 text-text-subtle">
+              <span>{headings.length}</span>
+              {outlineOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+            </span>
+          </button>
+          {outlineOpen && (
+            <div className="px-2 pb-3">
+              {headings.map((h, i) => {
+                const minLevel = Math.min(...headings.map((x) => x.level));
+                return (
+                  <button
+                    key={i}
+                    onClick={() => scrollToHeading(h.text)}
+                    className={cn(
+                      'w-full text-left px-2 py-[4px] rounded text-[12px] font-serif text-text-muted hover:text-text hover:bg-bg-hover truncate transition-colors'
+                    )}
+                    style={{ paddingLeft: 8 + (h.level - minLevel) * 10 }}
+                    title={h.text}
+                  >
+                    {h.text}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Linked from */}
       <Section label="Linked from" count={incomingCount}>
@@ -234,4 +325,31 @@ function renderExcerpt(line: string, target: string): React.ReactNode {
       <span key={i}>{p.value}</span>
     )
   );
+}
+
+function extractHeadings(md: string): Heading[] {
+  const out: Heading[] = [];
+  const noFm = md.replace(/^---\n[\s\S]*?\n---\n?/, '');
+  let inFence = false;
+  for (const line of noFm.split('\n')) {
+    if (/^```/.test(line)) { inFence = !inFence; continue; }
+    if (inFence) continue;
+    const m = line.match(/^(#{1,6})\s+(.+?)\s*$/);
+    if (m) out.push({ level: m[1].length, text: m[2].trim().replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, t, l) => l ?? t) });
+  }
+  return out;
+}
+
+function scrollToHeading(text: string) {
+  const editor = document.querySelector('.ProseMirror');
+  if (!editor) return;
+  for (const h of Array.from(editor.querySelectorAll('h1,h2,h3,h4,h5,h6'))) {
+    if ((h.textContent ?? '').trim() === text) {
+      h.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      (h as HTMLElement).style.transition = 'background 0.4s';
+      (h as HTMLElement).style.background = 'rgba(124,140,255,0.15)';
+      setTimeout(() => ((h as HTMLElement).style.background = ''), 800);
+      return;
+    }
+  }
 }

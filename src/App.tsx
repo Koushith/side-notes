@@ -16,6 +16,8 @@ import { ConnectionsPanel } from '@/components/ConnectionsPanel';
 import { CommandPalette } from '@/components/CommandPalette';
 import { Onboarding } from '@/components/Onboarding';
 import { ShortcutsHelp } from '@/components/ShortcutsHelp';
+import { WhatsNew, shouldShowWhatsNew } from '@/components/WhatsNew';
+import { VaultSwitcher } from '@/components/VaultSwitcher';
 
 export default function App() {
   const init = useVault((s) => s.init);
@@ -33,6 +35,8 @@ export default function App() {
 
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [whatsNewOpen, setWhatsNewOpen] = useState(() => shouldShowWhatsNew());
+  const [vaultSwitcherOpen, setVaultSwitcherOpen] = useState(false);
   const onboardingCompleted = useOnboarding((s) => s.completed);
   const startOnboarding = useOnboarding((s) => s.start);
 
@@ -95,9 +99,11 @@ export default function App() {
   if (!vaultPath) {
     return (
       <>
-        <EmptyState />
+        <EmptyState onOpenVaultSwitcher={() => setVaultSwitcherOpen(true)} />
         <Onboarding />
         <ShortcutsHelp open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+        <WhatsNew open={whatsNewOpen} onClose={() => setWhatsNewOpen(false)} />
+        <VaultSwitcher open={vaultSwitcherOpen} onClose={() => setVaultSwitcherOpen(false)} />
       </>
     );
   }
@@ -115,7 +121,7 @@ export default function App() {
         />
       )}
       <div className="flex flex-1 overflow-hidden">
-        {!inFocus && <Sidebar onOpenPalette={() => setPaletteOpen(true)} />}
+        {!inFocus && <Sidebar onOpenPalette={() => setPaletteOpen(true)} onOpenVaultSwitcher={() => setVaultSwitcherOpen(true)} />}
         <main className="flex-1 overflow-hidden bg-bg flex">
           <div className="flex-1 overflow-hidden flex flex-col">
             {!inFocus && view === 'editor' && <TabBar />}
@@ -155,9 +161,13 @@ export default function App() {
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}
         onShowShortcuts={() => setShortcutsOpen(true)}
+        onShowWhatsNew={() => setWhatsNewOpen(true)}
+        onOpenVaultSwitcher={() => setVaultSwitcherOpen(true)}
       />
       <Onboarding />
       <ShortcutsHelp open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+      <WhatsNew open={whatsNewOpen} onClose={() => setWhatsNewOpen(false)} />
+      <VaultSwitcher open={vaultSwitcherOpen} onClose={() => setVaultSwitcherOpen(false)} />
     </div>
   );
 }

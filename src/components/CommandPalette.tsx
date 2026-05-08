@@ -8,6 +8,8 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onShowShortcuts?: () => void;
+  onShowWhatsNew?: () => void;
+  onOpenVaultSwitcher?: () => void;
 }
 
 interface Hit {
@@ -20,7 +22,7 @@ interface Hit {
   snippet?: string;
 }
 
-export function CommandPalette({ open, onClose, onShowShortcuts }: Props) {
+export function CommandPalette({ open, onClose, onShowShortcuts, onShowWhatsNew, onOpenVaultSwitcher }: Props) {
   const [query, setQuery] = useState('');
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [contentHits, setContentHits] = useState<{ rel: string; title: string; snippet: string }[]>([]);
@@ -32,7 +34,7 @@ export function CommandPalette({ open, onClose, onShowShortcuts }: Props) {
   const createFile = useVault((s) => s.createFile);
   const openOrCreateDaily = useVault((s) => s.openOrCreateDaily);
   const searchContent = useVault((s) => s.searchContent);
-  const pickVault = useVault((s) => s.pickVault);
+
   const createFromTemplate = useVault((s) => s.createFromTemplate);
   const createCanvas = useVault((s) => s.createCanvas);
   const startOnboarding = useOnboarding((s) => s.start);
@@ -155,9 +157,9 @@ export function CommandPalette({ open, onClose, onShowShortcuts }: Props) {
         kind: 'action',
         title: 'Switch vault',
         icon: <FolderOpen size={14} />,
-        run: async () => {
-          await pickVault();
+        run: () => {
           onClose();
+          onOpenVaultSwitcher?.();
         },
       },
       {
@@ -177,6 +179,16 @@ export function CommandPalette({ open, onClose, onShowShortcuts }: Props) {
         run: () => {
           onClose();
           startOnboarding();
+        },
+      },
+      {
+        kind: 'action',
+        title: "What's new",
+        hint: 'Release notes',
+        icon: <BookOpen size={14} />,
+        run: () => {
+          onClose();
+          onShowWhatsNew?.();
         },
       },
       ...templates.map<Hit>((t) => ({
@@ -199,7 +211,7 @@ export function CommandPalette({ open, onClose, onShowShortcuts }: Props) {
     if (!query) return all;
     const q = query.toLowerCase();
     return all.filter((a) => a.title.toLowerCase().includes(q));
-  }, [query, createFile, openOrCreateDaily, setView, pickVault, onClose, templates, createFromTemplate, createCanvas, onShowShortcuts, startOnboarding]);
+  }, [query, createFile, openOrCreateDaily, setView, onClose, templates, createFromTemplate, createCanvas, onShowShortcuts, startOnboarding, onOpenVaultSwitcher]);
 
   const allHits = useMemo(() => [...fileHits, ...actionHits], [fileHits, actionHits]);
 

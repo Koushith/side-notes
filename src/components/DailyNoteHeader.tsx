@@ -40,14 +40,6 @@ export function DailyNoteHeader({ rel, title, onTitleChange }: Props) {
       return null;
     }
   });
-  useEffect(() => {
-    try {
-      const v = localStorage.getItem(energyKey);
-      setEnergyState(ENERGY.includes(v as Energy) ? (v as Energy) : null);
-    } catch {
-      setEnergyState(null);
-    }
-  }, [energyKey]);
   const setEnergy = (m: Energy) => {
     try {
       localStorage.setItem(energyKey, m);

@@ -3,7 +3,7 @@ import { pathToFileURL } from 'node:url';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs/promises';
-import { existsSync, watch as fsWatch } from 'node:fs';
+import { existsSync } from 'node:fs';
 import os from 'node:os';
 import chokidar, { FSWatcher } from 'chokidar';
 
@@ -139,6 +139,12 @@ app.on('activate', () => {
 });
 
 // ---- IPC: Vault ----
+function addToRecents(settings: Record<string, unknown>, vaultPath: string): string[] {
+  const existing = Array.isArray(settings.recentVaults) ? (settings.recentVaults as string[]) : [];
+  const next = [vaultPath, ...existing.filter((p) => p !== vaultPath)].slice(0, 8);
+  return next;
+}
+
 ipcMain.handle('vault:pick', async () => {
   const result = await dialog.showOpenDialog(win!, {
     properties: ['openDirectory', 'createDirectory'],
@@ -147,14 +153,28 @@ ipcMain.handle('vault:pick', async () => {
   });
   if (result.canceled || !result.filePaths[0]) return null;
   const vaultPath = result.filePaths[0];
-  await writeSettings({ ...(await readSettings()), vaultPath });
+  const settings = await readSettings();
+  await writeSettings({ ...settings, vaultPath, recentVaults: addToRecents(settings, vaultPath) });
   return vaultPath;
 });
 
 ipcMain.handle('vault:get', async () => {
   const settings = await readSettings();
-  if (settings.vaultPath && existsSync(settings.vaultPath)) return settings.vaultPath;
+  if (settings.vaultPath && existsSync(settings.vaultPath as string)) return settings.vaultPath;
   return null;
+});
+
+ipcMain.handle('vault:getRecents', async () => {
+  const settings = await readSettings();
+  const recents = Array.isArray(settings.recentVaults) ? (settings.recentVaults as string[]) : [];
+  return recents.filter((p) => existsSync(p));
+});
+
+ipcMain.handle('vault:openRecent', async (_e, vaultPath: string) => {
+  if (!existsSync(vaultPath)) return null;
+  const settings = await readSettings();
+  await writeSettings({ ...settings, vaultPath, recentVaults: addToRecents(settings, vaultPath) });
+  return vaultPath;
 });
 
 ipcMain.handle('vault:close', async () => {
@@ -338,6 +358,3 @@ ipcMain.handle(
     }
   }
 );
-
-// keep linter happy
-void fsWatch;
