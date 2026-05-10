@@ -14,6 +14,8 @@ import {
   Keyboard,
   Pin,
   Megaphone,
+  Code2,
+  Check,
 } from 'lucide-react';
 import { useVault } from '@/stores/vault';
 import { useTheme } from '@/stores/theme';
@@ -42,6 +44,8 @@ export function TitleBar({ onOpenPalette, onShowShortcuts, onShowWhatsNew, onGet
 
   const mode = useTheme((s) => s.mode);
   const toggleFocus = useUi((s) => s.toggleFocus);
+  const devMode = useUi((s) => s.devMode);
+  const toggleDevMode = useUi((s) => s.toggleDevMode);
 
   const [moreOpen, setMoreOpen] = useState(false);
   const [themeOpen, setThemeOpen] = useState(false);
@@ -209,6 +213,16 @@ export function TitleBar({ onOpenPalette, onShowShortcuts, onShowWhatsNew, onGet
             </Item>
             <div className="my-1 border-t border-border" />
             <Item
+              icon={<Code2 size={13} />}
+              trailing={devMode ? <Check size={13} className="text-accent" /> : null}
+              onClick={() => {
+                toggleDevMode();
+              }}
+            >
+              Developer mode
+            </Item>
+            <div className="my-1 border-t border-border" />
+            <Item
               icon={<FileDown size={13} />}
               onClick={() => {
                 setMoreOpen(false);
@@ -258,11 +272,13 @@ function Item({
   children,
   onClick,
   disabled,
+  trailing,
 }: {
   icon: React.ReactNode;
   children: React.ReactNode;
   onClick: () => void;
   disabled?: boolean;
+  trailing?: React.ReactNode;
 }) {
   return (
     <button
@@ -274,7 +290,8 @@ function Item({
       )}
     >
       <span className="text-text-subtle">{icon}</span>
-      {children}
+      <span className="flex-1 text-left">{children}</span>
+      {trailing}
     </button>
   );
 }

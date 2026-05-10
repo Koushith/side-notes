@@ -8,13 +8,13 @@ export function ViewModeTabs() {
 
   return (
     <div className="inline-flex items-center rounded-md border border-border bg-bg-elevated p-0.5 text-[12px] gap-0.5">
-      <Tab active={!rawMode} onClick={() => setRawMode(false)} title="Rich editor — formatted preview">
+      <Tab active={!rawMode} onClick={() => setRawMode(false)} title="Rendered preview of the note">
         <PenSquare size={12} />
-        Edit
+        Preview
       </Tab>
-      <Tab active={rawMode} onClick={() => setRawMode(true)} title="Raw markdown source">
+      <Tab active={rawMode} onClick={() => setRawMode(true)} title="Edit raw markdown source">
         <Code2 size={12} />
-        Source
+        Markdown
       </Tab>
     </div>
   );
