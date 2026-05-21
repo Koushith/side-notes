@@ -8,6 +8,8 @@
     "render": "remotion render V030 out/v0.3.0.mp4 --codec h264 --concurrency 4",
     "render-vertical": "remotion render V030Vertical out/v0.3.0-vertical.mp4 --codec h264",
     "render-live": "remotion render V030Live out/v0.3.0-live.mp4 --codec h264 --concurrency 4",
+    "render-cinematic": "remotion render V030Cinematic out/v0.3.0-cinematic.mp4 --codec h264 --concurrency 4",
+    "render-cinematic-audio": "REMOTION_AUDIO=1 remotion render V030Cinematic out/v0.3.0-cinematic-music.mp4 --codec h264 --concurrency 4",
     "capture": "playwright test capture/capture.spec.ts",
     "still": "remotion still V030 out/v0.3.0-frame.png --frame=0"
   },
