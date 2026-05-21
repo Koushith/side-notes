@@ -22,7 +22,7 @@ remotion/
 ```bash
 cd remotion
 npm install
-npm run render            # → ../release/v0.3.0.mp4
+npm run render            # → out/v0.3.0.mp4
 npm run render-vertical   # → ../release/v0.3.0-vertical.mp4
 ```
 
