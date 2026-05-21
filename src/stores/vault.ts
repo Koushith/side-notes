@@ -1,6 +1,6 @@
 import { api } from '@/lib/api';
 import { parseNote } from '@/lib/markdown';
-import { basenameNoExt, joinPath } from '@/lib/utils';
+import { basenameNoExt, isMarkdownPath, isViewablePath, joinPath, stripMarkdownExt } from '@/lib/utils';
 import type { FileTreeNode, VaultFile, ViewMode } from '@/types';
 import { create } from 'zustand';
 
@@ -78,7 +78,7 @@ async function indexFile(vaultPath: string, rel: string, mtime: number): Promise
   // Only markdown files have text content worth parsing for links/tags/title.
   // Canvas and attachments (images, PDFs, .pen, .base, …) are name-only entries
   // so the sidebar can show them without us reading binary data.
-  if (!rel.toLowerCase().endsWith('.md')) {
+  if (!isMarkdownPath(rel)) {
     return { path: full, rel, name: fallback, mtime, links: [], tags: [], title: fallback };
   }
   const raw = await api.files.read(full);
@@ -220,11 +220,10 @@ export const useVault = create<VaultState>((set, get) => ({
   },
 
   openFile(rel) {
-    // Only markdown and canvas have editors. Attachments (images, PDFs, .pen, .base, …)
-    // are visible in the tree but click-no-op until a dedicated viewer exists, so we
-    // don't shove binary data into the markdown editor.
+    // Markdown + canvas go to their editors; images and PDFs open in the AttachmentViewer.
+    // Anything else (.pen, .base, …) stays click-no-op until a dedicated viewer exists.
     const lower = rel.toLowerCase();
-    if (!lower.endsWith('.md') && !lower.endsWith('.canvas')) return;
+    if (!isMarkdownPath(lower) && !lower.endsWith('.canvas') && !isViewablePath(lower)) return;
     set((s) => {
       const tabs = s.tabs.includes(rel) ? s.tabs : [...s.tabs, rel];
       return { activeFile: rel, view: 'editor', tabs };
@@ -294,7 +293,30 @@ export const useVault = create<VaultState>((set, get) => ({
       i++;
     }
     const title = basenameNoExt(rel);
-    const initial = `# ${title}\n\n`;
+    // Todo files get a starter template so the header chrome has something to render.
+    // Dated todos use a "focus + quick wins + rolled over + done" shape that maps to how
+    // most people actually plan a day. Project todos use a priority cascade (now/next/later).
+    const isTodo = /(^|\/)todos?\//i.test(rel) || /(^|\/)todos?\.md$/i.test(rel);
+    const isDatedTodo = isTodo && /^\d{4}-\d{2}-\d{2}$/.test(title);
+    let initial: string;
+    if (isDatedTodo) {
+      // Header chrome already shows the date prominently, so no H1 — would just duplicate.
+      initial =
+        `> What's on my plate today.\n\n` +
+        `## Focus\n_The 1–3 things that matter most._\n\n- [ ] \n\n` +
+        `## Quick wins\n- [ ] \n\n` +
+        `## Rolled over\n- [ ] \n\n` +
+        `## Done\n`;
+    } else if (isTodo) {
+      initial =
+        `# ${title}\n\n` +
+        `## Now\n_What I'm actively working on._\n\n- [ ] \n\n` +
+        `## Next\n- [ ] \n\n` +
+        `## Later\n- [ ] \n\n` +
+        `## Done\n`;
+    } else {
+      initial = `# ${title}\n\n`;
+    }
     await api.files.create(vp, rel, initial);
     const indexed = await indexFile(vp, rel, Date.now());
     set((s) => {
@@ -309,7 +331,12 @@ export const useVault = create<VaultState>((set, get) => ({
   async renameFile(rel, newRel) {
     const vp = get().vaultPath;
     if (!vp) return;
-    const finalRel = newRel.endsWith('.md') ? newRel : `${newRel}.md`;
+    // Preserve the file's existing extension (.md, .mdx, .canvas, …) unless the caller
+    // supplied one explicitly. Forcing .md here previously broke renaming non-md files.
+    const hasExt = /\.[A-Za-z0-9]{1,8}$/.test(newRel);
+    const origExtMatch = rel.match(/\.[A-Za-z0-9]+$/);
+    const finalRel = hasExt ? newRel : `${newRel}${origExtMatch ? origExtMatch[0] : '.md'}`;
+    if (finalRel === rel) return;
     const oldFull = joinPath(vp, rel);
     const newFull = joinPath(vp, finalRel);
     await api.files.rename(oldFull, newFull);
@@ -322,6 +349,7 @@ export const useVault = create<VaultState>((set, get) => ({
       }
       return {
         activeFile: s.activeFile === rel ? finalRel : s.activeFile,
+        tabs: s.tabs.map((t) => (t === rel ? finalRel : t)),
         pinned,
       };
     });
@@ -492,7 +520,7 @@ export const useVault = create<VaultState>((set, get) => ({
     return [...get().files.values()].filter((f) => {
       if (f.rel === rel) return false;
       return f.links.some(
-        (l) => l.toLowerCase() === targetName || l.toLowerCase() === rel.replace(/\.md$/i, '').toLowerCase()
+        (l) => l.toLowerCase() === targetName || l.toLowerCase() === stripMarkdownExt(rel).toLowerCase()
       );
     });
   },

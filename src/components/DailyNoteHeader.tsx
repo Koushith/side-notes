@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Cloud, Calendar, BookOpen, Clock, Flame } from 'lucide-react';
+import { CheckSquare, Clock, FileText, Flame } from 'lucide-react';
+import type { Editor as TiptapEditor } from '@tiptap/core';
 import { useVault } from '@/stores/vault';
 import { api } from '@/lib/api';
 import { joinPath } from '@/lib/utils';
@@ -9,14 +10,15 @@ interface Props {
   rel: string;
   title: string;
   onTitleChange: (next: string) => void;
+  editor: TiptapEditor | null;
 }
 
 const ENERGY = ['drained', 'low', 'okay', 'good', 'wired'] as const;
 type Energy = (typeof ENERGY)[number];
 
-/** Parse `Daily Notes/YYYY-MM-DD.md` → Date, or null. */
+/** Parse `Daily Notes/YYYY-MM-DD.{md,mdx,markdown,…}` → Date, or null. */
 export function parseDailyDate(rel: string): Date | null {
-  const m = rel.match(/Daily Notes\/(\d{4})-(\d{2})-(\d{2})\.md$/i);
+  const m = rel.match(/Daily Notes\/(\d{4})-(\d{2})-(\d{2})\.(?:md|markdown|mdx|mdown|mkd|mkdn|mdwn)$/i);
   if (!m) return null;
   return new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
 }
@@ -25,7 +27,7 @@ export function isDailyNote(rel: string): boolean {
   return parseDailyDate(rel) !== null;
 }
 
-export function DailyNoteHeader({ rel, title, onTitleChange }: Props) {
+export function DailyNoteHeader({ rel, title, onTitleChange, editor }: Props) {
   const date = useMemo(() => parseDailyDate(rel), [rel]);
   const files = useVault((s) => s.files);
   const vaultPath = useVault((s) => s.vaultPath);
@@ -48,6 +50,36 @@ export function DailyNoteHeader({ rel, title, onTitleChange }: Props) {
     }
     setEnergyState(m);
   };
+
+  // Live stats from the editor (words + task counts). Updates on every keystroke.
+  const [stats, setStats] = useState<{ words: number; tasksOpen: number; tasksDone: number }>(
+    { words: 0, tasksOpen: 0, tasksDone: 0 }
+  );
+  useEffect(() => {
+    if (!editor) return;
+    const compute = () => {
+      const text = editor.getText({ blockSeparator: '\n' });
+      const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+      let tasksOpen = 0;
+      let tasksDone = 0;
+      editor.state.doc.descendants((node) => {
+        if (node.type.name === 'taskItem') {
+          if (node.attrs.checked) tasksDone++;
+          else tasksOpen++;
+        }
+      });
+      setStats({ words, tasksOpen, tasksDone });
+    };
+    compute();
+    // Listen to `transaction` so we also catch the initial setContent (emitUpdate=false).
+    const onTx = ({ transaction }: { transaction: { docChanged: boolean } }) => {
+      if (transaction.docChanged) compute();
+    };
+    editor.on('transaction', onTx);
+    return () => {
+      editor.off('transaction', onTx);
+    };
+  }, [editor]);
 
   // Compute writing streak: consecutive days ending today (or this note's date) that have a daily note.
   const streak = useMemo(() => {
@@ -145,9 +177,21 @@ export function DailyNoteHeader({ rel, title, onTitleChange }: Props) {
         <div className="flex-1 pt-1.5 min-w-0">
           <EditableTitle value={title} onChange={onTitleChange} />
           <div className="flex flex-wrap gap-2 mt-3.5">
-            <Chip icon={<Cloud size={11} />} label="Add weather" muted />
-            <Chip icon={<Calendar size={11} />} label="Add meetings" muted />
-            <Chip icon={<BookOpen size={11} />} label="Add reading" muted />
+            <Chip
+              icon={<FileText size={11} />}
+              label={stats.words === 1 ? '1 word' : `${stats.words.toLocaleString()} words`}
+            />
+            {(stats.tasksOpen > 0 || stats.tasksDone > 0) && (
+              <Chip
+                icon={<CheckSquare size={11} />}
+                label={
+                  stats.tasksOpen === 0
+                    ? `All ${stats.tasksDone} done`
+                    : `${stats.tasksOpen} open · ${stats.tasksDone} done`
+                }
+                accent={stats.tasksOpen === 0 && stats.tasksDone > 0}
+              />
+            )}
             {streak > 1 && (
               <Chip
                 icon={<Flame size={11} />}

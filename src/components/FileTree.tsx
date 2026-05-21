@@ -19,10 +19,13 @@ import {
   Star,
 } from 'lucide-react';
 import { useVault } from '@/stores/vault';
-import { cn, basenameNoExt, joinPath } from '@/lib/utils';
+import { cn, basenameNoExt, joinPath, MARKDOWN_EXT_RE } from '@/lib/utils';
 import { api } from '@/lib/api';
 import type { FileTreeNode } from '@/types';
 import { ContextMenu, MenuSection } from './ContextMenu';
+import { promptUser } from './PromptDialog';
+import { confirmUser } from './ConfirmDialog';
+import { toast } from './Toast';
 
 interface CreatingState {
   kind: 'file' | 'folder';
@@ -40,7 +43,7 @@ export function FileTree() {
   const createFolder = useVault((s) => s.createFolder);
   const moveFile = useVault((s) => s.moveFile);
 
-  const tree = useMemo(() => buildTree(files, folders), [files, folders]);
+  const tree = useMemo(() => regroupDailyNotes(buildTree(files, folders)), [files, folders]);
 
   const [creating, setCreating] = useState<CreatingState | null>(null);
   const [creatingValue, setCreatingValue] = useState('');
@@ -91,7 +94,7 @@ export function FileTree() {
           try {
             await moveFile(rel, '');
           } catch (err) {
-            window.alert((err as Error).message);
+            toast.error((err as Error).message);
           }
         }
       }}
@@ -111,7 +114,7 @@ export function FileTree() {
                 await createFile(v.trim());
               }
             } catch (err) {
-              window.alert((err as Error).message);
+              toast.error((err as Error).message);
             }
             setCreating(null);
           }}
@@ -159,7 +162,7 @@ function FolderNode({
   setCreating,
   setCreatingValue,
 }: NodeDispatchProps) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(node.defaultOpen ?? true);
   const [dragOver, setDragOver] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const moveFile = useVault((s) => s.moveFile);
@@ -167,6 +170,9 @@ function FolderNode({
   const createFolder = useVault((s) => s.createFolder);
   const deleteFolder = useVault((s) => s.deleteFolder);
   const vaultPath = useVault((s) => s.vaultPath);
+  // Virtual folders (e.g. Year/Month buckets inside Daily Notes) only exist in the UI —
+  // no disk path to rename, no drop target, no context menu actions.
+  const isVirtual = node.virtual === true;
 
   const sections: MenuSection[] = [
     {
@@ -217,10 +223,14 @@ function FolderNode({
           label: 'Delete Folder',
           icon: <Trash2 size={13} />,
           danger: true,
-          onClick: () => {
-            if (window.confirm(`Move folder "${node.name}" and its contents to trash?`)) {
-              deleteFolder(node.rel).catch((err) => window.alert(err.message));
-            }
+          onClick: async () => {
+            const ok = await confirmUser({
+              title: `Move "${node.name}" to trash?`,
+              message: 'The folder and everything inside it will go to the system trash.',
+              okLabel: 'Move to Trash',
+              destructive: true,
+            });
+            if (ok) deleteFolder(node.rel).catch((err) => toast.error(err.message));
           },
         },
       ],
@@ -232,6 +242,7 @@ function FolderNode({
       <div
         className="relative group"
         onDragOver={(e) => {
+          if (isVirtual) return;
           if (e.dataTransfer.types.includes('text/x-rel')) {
             e.preventDefault();
             setDragOver(true);
@@ -239,6 +250,7 @@ function FolderNode({
         }}
         onDragLeave={() => setDragOver(false)}
         onDrop={async (e) => {
+          if (isVirtual) return;
           e.preventDefault();
           setDragOver(false);
           const rel = e.dataTransfer.getData('text/x-rel');
@@ -247,7 +259,7 @@ function FolderNode({
               await moveFile(rel, node.rel);
               setOpen(true);
             } catch (err) {
-              window.alert((err as Error).message);
+              toast.error((err as Error).message);
             }
           }
         }}
@@ -255,11 +267,13 @@ function FolderNode({
         <button
           onClick={() => setOpen(!open)}
           onContextMenu={(e) => {
+            if (isVirtual) return;
             e.preventDefault();
             setMenu({ x: e.clientX, y: e.clientY });
           }}
           className={cn(
-            'w-full flex items-center gap-2 py-[5px] px-2 rounded text-[12.5px] font-medium text-text hover:bg-bg-hover transition-colors',
+            'w-full flex items-center gap-2 py-[5px] px-2 rounded text-[12.5px] font-medium hover:bg-bg-hover transition-colors',
+            isVirtual ? 'text-text-muted' : 'text-text',
             dragOver && 'bg-accent-subtle ring-1 ring-accent/40'
           )}
           style={{ paddingLeft: 8 + depth * 12 }}
@@ -271,16 +285,18 @@ function FolderNode({
             {node.children?.length ?? 0}
           </span>
         </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-            setMenu({ x: r.right, y: r.bottom });
-          }}
-          className="absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-bg-active text-text-muted"
-        >
-          <MoreHorizontal size={12} />
-        </button>
+        {!isVirtual && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+              setMenu({ x: r.right, y: r.bottom });
+            }}
+            className="absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-bg-active text-text-muted"
+          >
+            <MoreHorizontal size={12} />
+          </button>
+        )}
         {menu && (
           <ContextMenu
             x={menu.x}
@@ -309,7 +325,7 @@ function FolderNode({
                     await createFile(path);
                   }
                 } catch (err) {
-                  window.alert((err as Error).message);
+                  toast.error((err as Error).message);
                 }
                 setCreating(null);
               }}
@@ -397,16 +413,29 @@ function FileRow({ rel, name, depth }: { rel: string; name: string; depth: numbe
               await useVault.getState().reloadIndex();
               useVault.getState().openFile(newRel);
             } catch (err) {
-              window.alert((err as Error).message);
+              toast.error((err as Error).message);
             }
           },
         },
         {
           label: 'Rename',
           icon: <Pencil size={13} />,
-          onClick: () => {
-            const next = window.prompt('Rename to:', rel.replace(/\.(md|canvas)$/i, ''));
-            if (next && next.trim()) renameFile(rel, next.trim()).catch(console.error);
+          onClick: async () => {
+            const stripped = rel.replace(MARKDOWN_EXT_RE, '').replace(/\.canvas$/i, '');
+            const next = await promptUser({
+              title: 'Rename',
+              message: rel,
+              defaultValue: stripped,
+              okLabel: 'Rename',
+            });
+            if (next && next.trim() && next.trim() !== stripped) {
+              try {
+                await renameFile(rel, next.trim());
+              } catch (err) {
+                console.error(err);
+                toast.error(`Rename failed: ${(err as Error).message}`);
+              }
+            }
           },
         },
       ],
@@ -417,10 +446,14 @@ function FileRow({ rel, name, depth }: { rel: string; name: string; depth: numbe
           label: 'Delete',
           icon: <Trash2 size={13} />,
           danger: true,
-          onClick: () => {
-            if (window.confirm(`Move "${name}" to trash?`)) {
-              deleteFile(rel).catch(console.error);
-            }
+          onClick: async () => {
+            const ok = await confirmUser({
+              title: `Move "${name}" to trash?`,
+              message: 'You can restore it from the system trash.',
+              okLabel: 'Move to Trash',
+              destructive: true,
+            });
+            if (ok) deleteFile(rel).catch((err) => toast.error((err as Error).message));
           },
         },
       ],
@@ -519,6 +552,75 @@ function InlineInput({
       />
     </div>
   );
+}
+
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+/** Display-only: group `Daily Notes/YYYY-MM-DD.md` files under virtual Year/Month buckets.
+ *  Files themselves keep their flat rel paths on disk, so opening, saving, linking, and
+ *  the watcher all stay correct. The virtual nodes carry `virtual: true` so the renderer
+ *  hides destructive actions (rename/delete/drop) on them. */
+function regroupDailyNotes(tree: FileTreeNode[]): FileTreeNode[] {
+  return tree.map((node) => {
+    if (node.type !== 'folder' || node.rel !== 'Daily Notes' || !node.children) return node;
+    return { ...node, children: groupDailyChildren(node.children) };
+  });
+}
+
+function groupDailyChildren(children: FileTreeNode[]): FileTreeNode[] {
+  // Year → Month → file list. Untouched: existing subfolders + non-dated files.
+  const byYear = new Map<string, Map<number, FileTreeNode[]>>();
+  const passthrough: FileTreeNode[] = [];
+  for (const c of children) {
+    // Preserve real user-created subfolders (e.g. Daily Notes/Todos) as-is.
+    if (c.type === 'folder') {
+      passthrough.push(c);
+      continue;
+    }
+    const m = c.name.match(/^(\d{4})-(\d{2})-\d{2}$/);
+    if (!m) {
+      passthrough.push(c); // README, scratch files, etc.
+      continue;
+    }
+    const year = m[1];
+    const monthIdx = parseInt(m[2], 10) - 1;
+    if (!byYear.has(year)) byYear.set(year, new Map());
+    const months = byYear.get(year)!;
+    if (!months.has(monthIdx)) months.set(monthIdx, []);
+    months.get(monthIdx)!.push(c);
+  }
+  const years = [...byYear.keys()].sort().reverse(); // most recent first
+  const yearNodes: FileTreeNode[] = years.map((year, yi) => {
+    const months = byYear.get(year)!;
+    const monthIdxs = [...months.keys()].sort((a, b) => b - a); // newest month first
+    const monthNodes: FileTreeNode[] = monthIdxs.map((idx, mi) => {
+      const files = months.get(idx)!.sort((a, b) => b.name.localeCompare(a.name)); // newest day first
+      return {
+        type: 'folder',
+        name: MONTH_NAMES[idx],
+        path: '',
+        rel: `__virtual__/Daily Notes/${year}/${MONTH_NAMES[idx]}`,
+        children: files,
+        virtual: true,
+        // Only the most-recent month of the most-recent year opens by default; the rest
+        // collapse so the sidebar stays short.
+        defaultOpen: yi === 0 && mi === 0,
+      };
+    });
+    return {
+      type: 'folder',
+      name: year,
+      path: '',
+      rel: `__virtual__/Daily Notes/${year}`,
+      children: monthNodes,
+      virtual: true,
+      defaultOpen: yi === 0,
+    };
+  });
+  return [...passthrough, ...yearNodes];
 }
 
 function buildTree(

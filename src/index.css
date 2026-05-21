@@ -385,27 +385,80 @@
   .react-flow__resize-control.handle.right:not(.top):not(.bottom) {
     display: none !important;
   }
+  /* ---- task list ----
+     Hide the native checkbox and draw our own — the OS checkbox doesn't theme well
+     and reads as alien chrome inside a soft prose page. */
   .ProseMirror ul[data-type="taskList"] {
     list-style: none;
-    padding-left: 0.5em;
+    padding-left: 0;
+    margin: 8px 0;
   }
   .ProseMirror ul[data-type="taskList"] li {
     display: flex;
-    gap: 0.5em;
+    gap: 10px;
     align-items: flex-start;
+    padding: 3px 6px 3px 4px;
+    margin: 0;
+    border-radius: 6px;
+    transition: background-color 120ms ease;
+  }
+  .ProseMirror ul[data-type="taskList"] li:hover {
+    background-color: rgb(var(--c-bg-hover) / 0.5);
   }
   .ProseMirror ul[data-type="taskList"] li > label {
-    margin-top: 0.4em;
-  }
-  .ProseMirror ul[data-type="taskList"] input[type="checkbox"] {
-    accent-color: #7c8cff;
-    width: 1em;
-    height: 1em;
+    margin: 0;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    height: 1.7em; /* match paragraph line-height so the box sits beside the first line */
     cursor: pointer;
   }
+  .ProseMirror ul[data-type="taskList"] li > div {
+    flex: 1;
+    min-width: 0;
+    color: rgb(var(--c-text));
+  }
+  .ProseMirror ul[data-type="taskList"] li > div > p {
+    margin: 0;
+    line-height: 1.7;
+  }
+  /* Custom checkbox: hide the native, draw a square with our border + accent fill on check. */
+  .ProseMirror ul[data-type="taskList"] input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 15px;
+    height: 15px;
+    border: 1.5px solid rgb(var(--c-text-muted));
+    border-radius: 4px;
+    background-color: transparent;
+    cursor: pointer;
+    position: relative;
+    margin: 0;
+    transition: background-color 120ms ease, border-color 120ms ease;
+  }
+  .ProseMirror ul[data-type="taskList"] input[type="checkbox"]:hover {
+    border-color: rgb(var(--c-text));
+  }
+  .ProseMirror ul[data-type="taskList"] input[type="checkbox"]:checked {
+    background-color: rgb(var(--c-accent));
+    border-color: rgb(var(--c-accent));
+  }
+  .ProseMirror ul[data-type="taskList"] input[type="checkbox"]:checked::after {
+    content: "";
+    position: absolute;
+    left: 3.5px;
+    top: 0.5px;
+    width: 5px;
+    height: 9px;
+    /* Checkmark uses the page background so it stays high-contrast on top of the accent fill. */
+    border: solid rgb(var(--c-bg));
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
   .ProseMirror ul[data-type="taskList"] li[data-checked="true"] > div {
-    color: rgb(var(--c-text-subtle));
+    color: rgb(var(--c-text-muted));
     text-decoration: line-through;
+    text-decoration-color: rgb(var(--c-text-muted));
   }
 
   /* ---- micro-interactions ---- */

@@ -7,6 +7,43 @@ const CHANGELOG: {
   sections: { label: 'New' | 'Fixed' | 'Removed'; items: string[] }[];
 }[] = [
   {
+    version: '0.3.0',
+    date: 'May 2026',
+    sections: [
+      {
+        label: 'New',
+        items: [
+          'Mermaid diagrams — flowcharts, sequence, gantt and more render live inside ```mermaid code blocks, themed to the active palette',
+          'Image + PDF viewer — click any .png/.jpg/.gif/.webp/.svg/.bmp/.avif/.pdf in the file tree to open it in a tab (PDFs use Chromium\'s built-in viewer)',
+          'Todo notes — files under any /todos/ folder (or named todos.md) get a dedicated header with live task counts, progress bar, and an Add task affordance',
+          'Daily notes auto-group by Year / Month in the sidebar — purely visual, files stay flat on disk so iCloud, Dropbox, and git don\'t see a thing',
+          'Markdown variants — .markdown, .mdx, .mdown, .mkd, .mkdn, .mdwn all index and open in the editor',
+          'Carbon · dark is now the default theme on fresh installs',
+        ],
+      },
+      {
+        label: 'Fixed',
+        items: [
+          'Critical data-loss path: editing a file outside SideNotes (iCloud, Dropbox, git checkout, another editor) no longer gets silently clobbered by the open tab\'s stale buffer — the editor reloads on external change and preserves unsaved local edits on conflict',
+          'Rename, new note, new folder, new canvas, and link dialogs no longer crash on Electron\'s disabled window.prompt — replaced with a themed in-app dialog',
+          'Native confirm() and alert() replaced with a styled confirmation modal + non-blocking toast',
+          'Right-click rename now preserves the original extension instead of forcing .md (canvas, mdx, markdown renames work correctly)',
+          'Tab strip updates correctly after rename; stale tabs pointing at deleted files close themselves instead of looping read errors',
+          'Task checkbox color follows the active theme accent (was a hardcoded blue)',
+          'Daily-note + todo task counts no longer stuck at 0 on file load',
+          'vault:// image resolver now finds attachments at common publish-site paths (blog/<slug>/foo.png resolves to blogs/images/<slug>/foo.png)',
+          'Custom-styled checkboxes replace the heavy native OS chrome inside the task list',
+        ],
+      },
+      {
+        label: 'Removed',
+        items: [
+          'Placeholder "Add weather / Add meetings / Add reading" chips on daily notes — replaced with live Words / Tasks / Streak counters driven from the editor',
+        ],
+      },
+    ],
+  },
+  {
     version: '0.2.0',
     date: 'May 2026',
     sections: [

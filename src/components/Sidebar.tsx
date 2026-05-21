@@ -16,6 +16,8 @@ import { useVault } from '@/stores/vault';
 import { FileTree } from './FileTree';
 import { TagPanel } from './TagPanel';
 import { cn } from '@/lib/utils';
+import { promptUser } from './PromptDialog';
+import { toast } from './Toast';
 
 interface Props {
   onOpenPalette: () => void;
@@ -37,7 +39,9 @@ export function Sidebar({ onOpenPalette, onOpenVaultSwitcher }: Props) {
 
   const [tagsOpen, setTagsOpen] = useState(true);
 
-  const vaultName = vaultPath?.split(/[\\/]/).pop() ?? 'SideNotes';
+  const rawVaultName = vaultPath?.split(/[\\/]/).pop() ?? 'SideNotes';
+  // Brand display: "sidenotes" folder always shows as "SideNotes" (brand title case).
+  const vaultName = rawVaultName.toLowerCase() === 'sidenotes' ? 'SideNotes' : rawVaultName;
 
   // Determine which nav item is active based on the current view + active file
   const isToday = (() => {
@@ -137,8 +141,13 @@ export function Sidebar({ onOpenPalette, onOpenVaultSwitcher }: Props) {
             if (first) {
               useVault.getState().openFile(first.rel);
             } else {
-              const name = window.prompt('Canvas name:', 'Untitled canvas');
-              if (name?.trim()) useVault.getState().createCanvas(name.trim());
+              promptUser({
+                title: 'New Canvas',
+                defaultValue: 'Untitled canvas',
+                okLabel: 'Create',
+              }).then((name) => {
+                if (name?.trim()) useVault.getState().createCanvas(name.trim());
+              });
             }
           }}
         />
@@ -271,30 +280,42 @@ function NewItemMenu() {
           <NewItemMenuRow
             icon={<FilePlus size={13} />}
             label="New Note"
-            onClick={() => {
-              const name = window.prompt('Note name:', 'Untitled');
-              if (name?.trim()) createFile(name.trim()).catch((err) => window.alert((err as Error).message));
+            onClick={async () => {
               setOpen(false);
+              const name = await promptUser({
+                title: 'New Note',
+                defaultValue: 'Untitled',
+                okLabel: 'Create',
+              });
+              if (name?.trim()) createFile(name.trim()).catch((err) => toast.error((err as Error).message));
             }}
           />
           <NewItemMenuRow
             icon={<FolderPlus size={13} />}
             label="New Folder"
-            onClick={() => {
-              const name = window.prompt('Folder name:', 'New folder');
-              if (name?.trim()) {
-                useVault.getState().createFolder(name.trim()).catch((err) => window.alert((err as Error).message));
-              }
+            onClick={async () => {
               setOpen(false);
+              const name = await promptUser({
+                title: 'New Folder',
+                defaultValue: 'New folder',
+                okLabel: 'Create',
+              });
+              if (name?.trim()) {
+                useVault.getState().createFolder(name.trim()).catch((err) => toast.error((err as Error).message));
+              }
             }}
           />
           <NewItemMenuRow
             icon={<LayoutGrid size={13} />}
             label="New Canvas"
-            onClick={() => {
-              const name = window.prompt('Canvas name:', 'Untitled canvas');
-              if (name?.trim()) createCanvas(name.trim()).catch((err) => window.alert((err as Error).message));
+            onClick={async () => {
               setOpen(false);
+              const name = await promptUser({
+                title: 'New Canvas',
+                defaultValue: 'Untitled canvas',
+                okLabel: 'Create',
+              });
+              if (name?.trim()) createCanvas(name.trim()).catch((err) => toast.error((err as Error).message));
             }}
           />
         </div>

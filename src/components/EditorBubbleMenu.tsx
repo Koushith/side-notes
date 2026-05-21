@@ -1,6 +1,7 @@
 import { BubbleMenu, type Editor } from '@tiptap/react';
 import { Bold, Italic, Strikethrough, Code, Link2, Heading1, Heading2, Heading3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { promptUser } from './PromptDialog';
 
 interface Props {
   editor: Editor;
@@ -73,8 +74,13 @@ export function EditorBubbleMenu({ editor }: Props) {
       <Separator />
       <ToolButton
         active={isActive('link')}
-        onClick={() => {
-          const url = window.prompt('URL', editor.getAttributes('link').href ?? 'https://');
+        onClick={async () => {
+          const url = await promptUser({
+            title: 'Link',
+            placeholder: 'https://…',
+            defaultValue: editor.getAttributes('link').href ?? 'https://',
+            okLabel: 'Apply',
+          });
           if (url === null) return;
           if (url === '') {
             editor.chain().focus().unsetLink().run();

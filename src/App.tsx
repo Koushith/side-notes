@@ -9,6 +9,8 @@ import { TabBar } from '@/components/TabBar';
 import { Editor } from '@/components/Editor';
 import { RawEditor } from '@/components/RawEditor';
 import { CanvasView } from '@/components/CanvasView';
+import { AttachmentViewer } from '@/components/AttachmentViewer';
+import { isViewablePath as isViewable } from '@/lib/utils';
 import { GraphView } from '@/components/GraphView';
 import { AllNotesView } from '@/components/AllNotesView';
 import { EmptyState } from '@/components/EmptyState';
@@ -20,6 +22,9 @@ import { ShortcutsHelp } from '@/components/ShortcutsHelp';
 import { WhatsNew, shouldShowWhatsNew, markWhatsNewSeen } from '@/components/WhatsNew';
 import { About } from '@/components/About';
 import { VaultSwitcher } from '@/components/VaultSwitcher';
+import { PromptHost } from '@/components/PromptDialog';
+import { ConfirmHost } from '@/components/ConfirmDialog';
+import { ToastHost } from '@/components/Toast';
 
 export default function App() {
   const init = useVault((s) => s.init);
@@ -117,6 +122,9 @@ export default function App() {
         <WhatsNew open={whatsNewOpen} onClose={() => setWhatsNewOpen(false)} />
         <About open={aboutOpen} onClose={() => setAboutOpen(false)} />
         <VaultSwitcher open={vaultSwitcherOpen} onClose={() => setVaultSwitcherOpen(false)} />
+        <PromptHost />
+        <ConfirmHost />
+        <ToastHost />
       </>
     );
   }
@@ -152,6 +160,8 @@ export default function App() {
               ) : activeFile ? (
                 activeFile.endsWith('.canvas') ? (
                   <CanvasView key={activeFile} rel={activeFile} vaultPath={vaultPath} />
+                ) : isViewable(activeFile) ? (
+                  <AttachmentViewer key={activeFile} rel={activeFile} vaultPath={vaultPath} />
                 ) : rawMode ? (
                   <RawEditor key={activeFile} rel={activeFile} vaultPath={vaultPath} />
                 ) : (
@@ -186,6 +196,9 @@ export default function App() {
       <WhatsNew open={whatsNewOpen} onClose={() => setWhatsNewOpen(false)} />
       <About open={aboutOpen} onClose={() => setAboutOpen(false)} />
       <VaultSwitcher open={vaultSwitcherOpen} onClose={() => setVaultSwitcherOpen(false)} />
+      <PromptHost />
+      <ConfirmHost />
+      <ToastHost />
     </div>
   );
 }

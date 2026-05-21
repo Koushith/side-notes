@@ -9,8 +9,8 @@ import Table from '@tiptap/extension-table';
 import TableRow from '@tiptap/extension-table-row';
 import TableCell from '@tiptap/extension-table-cell';
 import TableHeader from '@tiptap/extension-table-header';
-import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import { createLowlight, common } from 'lowlight';
+import { MermaidCodeBlock } from './extensions/MermaidCodeBlock';
 import { Markdown } from 'tiptap-markdown';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVault } from '@/stores/vault';
@@ -26,11 +26,13 @@ import { EditorBubbleMenu } from './EditorBubbleMenu';
 import { TableBubbleMenu } from './TableBubbleMenu';
 import { ViewModeTabs } from './ViewModeTabs';
 import { DailyNoteHeader, isDailyNote } from './DailyNoteHeader';
+import { TodoNoteHeader, isTodoNote } from './TodoNoteHeader';
+import { toast } from './Toast';
 import { resolveWikilink } from '@/lib/markdown';
 import { api } from '@/lib/api';
 import { joinPath, basenameNoExt, cn } from '@/lib/utils';
 import { saveImageToVault } from '@/lib/images';
-import { Heading1, Heading2, Heading3, List, ListOrdered, CheckSquare, Code, Quote, Minus, Hash, Link2, Image as ImageIcon, Table as TableIcon, Pin } from 'lucide-react';
+import { Heading1, Heading2, Heading3, List, ListOrdered, CheckSquare, Code, Quote, Minus, Hash, Link2, Image as ImageIcon, Table as TableIcon, Pin, Workflow } from 'lucide-react';
 
 const lowlight = createLowlight(common);
 
@@ -71,10 +73,14 @@ export function Editor({ rel, vaultPath }: EditorProps) {
   const lastSavedRel = useRef<string>(rel);
   const currentRelRef = useRef<string>(rel);
   const vaultPathRef = useRef<string>(vaultPath);
+  // Last content we wrote to (or read from) disk. Used to (a) skip no-op saves and
+  // (b) detect when our own write echoes back via the watcher, vs a real external edit.
+  const lastSavedRaw = useRef<string>('');
   vaultPathRef.current = vaultPath;
   currentRelRef.current = rel;
 
   const dailyMode = isDailyNote(rel);
+  const todoMode = !dailyMode && isTodoNote(rel);
   const [dailyTitle, setDailyTitle] = useState('');
   const dailyTitleRef = useRef('');
   dailyTitleRef.current = dailyTitle;
@@ -87,7 +93,7 @@ export function Editor({ rel, vaultPath }: EditorProps) {
         StarterKit.configure({
           codeBlock: false, // we use lowlight instead
         }),
-        CodeBlockLowlight.configure({ lowlight }),
+        MermaidCodeBlock.configure({ lowlight }),
         Link.configure({ openOnClick: false, HTMLAttributes: { rel: 'noopener noreferrer' } }),
         Placeholder.configure({
           placeholder: 'Start typing, or press / for blocks…',
@@ -172,6 +178,11 @@ export function Editor({ rel, vaultPath }: EditorProps) {
           const finalMd = isDailyNote(lastSavedRel.current)
             ? prependDailyTitle(dailyTitleRef.current, cleaned)
             : cleaned;
+          // No-op write guard: if the serialized markdown matches what we last loaded
+          // from / wrote to disk, skip the save. Avoids the stale-state-clobbers-external
+          // -change race when the watcher hasn't reloaded yet.
+          if (finalMd === lastSavedRaw.current) return;
+          lastSavedRaw.current = finalMd;
           saveFile(lastSavedRel.current, finalMd).catch(console.error);
         }, 400);
       },
@@ -225,10 +236,17 @@ export function Editor({ rel, vaultPath }: EditorProps) {
         const withWikis = preprocessWikilinks(withImagePaths);
         const withTags = preprocessTags(withWikis);
         lastSavedRel.current = rel;
+        lastSavedRaw.current = raw;
         editor.commands.setContent(withTags, false, { preserveWhitespace: 'full' });
         setTimeout(() => editor.commands.focus('end', { scrollIntoView: false }), 50);
       } catch (err) {
-        console.error('Failed to load file', err);
+        const msg = (err as Error).message ?? '';
+        if (/ENOENT|no such file/i.test(msg)) {
+          // Stale tab pointing at a file that no longer exists — drop it quietly.
+          useVault.getState().closeTab(rel);
+        } else {
+          console.error('Failed to load file', err);
+        }
       }
     })();
     return () => {
@@ -236,6 +254,64 @@ export function Editor({ rel, vaultPath }: EditorProps) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rel, editor]);
+
+  // External-change watcher: reload editor content when the active file is changed
+  // out-of-band (iCloud / Dropbox / git checkout / another editor). Without this, the
+  // editor's stale in-memory state would silently overwrite the new disk content on
+  // the next keystroke.
+  useEffect(() => {
+    if (!editor) return;
+    const unsubscribe = api.watch.onEvent(async (e: { type: string; path: string }) => {
+      if (e.type !== 'change' && e.type !== 'add') return;
+      const vp = vaultPathRef.current;
+      if (!vp) return;
+      const changedRel = e.path.replace(vp, '').replace(/^[\\/]+/, '');
+      if (changedRel !== currentRelRef.current) return;
+      try {
+        const fresh = await api.files.read(e.path);
+        // Echo of our own write — nothing to do.
+        if (fresh === lastSavedRaw.current) return;
+        // Compute what we would save right now from the editor's state. If it matches
+        // what we last loaded/wrote, there are no unsaved local edits → safe to reload.
+        const ed = editorRef.current;
+        const md = ed
+          ? (ed.storage as { markdown: { getMarkdown: () => string } }).markdown.getMarkdown()
+          : '';
+        const cleaned = ed ? unrewriteImagePaths(md, lastSavedRel.current) : '';
+        const currentSerialized = ed
+          ? isDailyNote(lastSavedRel.current)
+            ? prependDailyTitle(dailyTitleRef.current, cleaned)
+            : cleaned
+          : '';
+        const hasUnsavedEdits = ed != null && currentSerialized !== lastSavedRaw.current;
+        if (hasUnsavedEdits) {
+          // Don't clobber the user's in-progress work, but also don't silently overwrite
+          // the external change next save. Hold the disk version aside and warn.
+          toast.error(
+            `"${changedRel}" was modified on disk while you had unsaved edits — your local edits are kept. Re-open the tab to load the disk version.`
+          );
+          return;
+        }
+        // Safe path: replace editor content with the new disk content.
+        const noFm = fresh.replace(/^---\n[\s\S]*?\n---\n?/, '');
+        let nextBody = noFm;
+        if (isDailyNote(currentRelRef.current)) {
+          const { title, rest } = extractFirstH1(noFm);
+          setDailyTitle(title);
+          nextBody = rest;
+        }
+        const withImagePaths = rewriteImagePaths(vp, nextBody, currentRelRef.current);
+        const withWikis = preprocessWikilinks(withImagePaths);
+        const withTags = preprocessTags(withWikis);
+        lastSavedRaw.current = fresh;
+        editor.commands.setContent(withTags, false, { preserveWhitespace: 'full' });
+      } catch (err) {
+        console.warn('External-change reload failed', err);
+      }
+    });
+    return unsubscribe;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor]);
 
   // Flush pending save on rel change / unmount
   useEffect(() => {
@@ -247,6 +323,8 @@ export function Editor({ rel, vaultPath }: EditorProps) {
         const finalMd = isDailyNote(lastSavedRel.current)
           ? prependDailyTitle(dailyTitleRef.current, cleaned)
           : cleaned;
+        if (finalMd === lastSavedRaw.current) return;
+        lastSavedRaw.current = finalMd;
         saveFile(lastSavedRel.current, finalMd).catch(console.error);
       }
     };
@@ -261,6 +339,8 @@ export function Editor({ rel, vaultPath }: EditorProps) {
       const md = (editor.storage as { markdown: { getMarkdown: () => string } }).markdown.getMarkdown();
       const cleaned = unrewriteImagePaths(md, lastSavedRel.current);
       const finalMd = prependDailyTitle(dailyTitleRef.current, cleaned);
+      if (finalMd === lastSavedRaw.current) return;
+      lastSavedRaw.current = finalMd;
       saveFile(lastSavedRel.current, finalMd).catch(console.error);
     }, 400);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -309,7 +389,7 @@ export function Editor({ rel, vaultPath }: EditorProps) {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {!dailyMode && (
+      {!dailyMode && !todoMode && (
         <div className="px-16 pt-14 pb-2">
           <div className="max-w-3xl mx-auto">
             <div className="flex justify-end mb-3">
@@ -362,7 +442,15 @@ export function Editor({ rel, vaultPath }: EditorProps) {
               <div className="flex justify-end pt-6">
                 <ViewModeTabs />
               </div>
-              <DailyNoteHeader rel={rel} title={dailyTitle} onTitleChange={setDailyTitle} />
+              <DailyNoteHeader rel={rel} title={dailyTitle} onTitleChange={setDailyTitle} editor={editor} />
+            </>
+          )}
+          {todoMode && (
+            <>
+              <div className="flex justify-end pt-6">
+                <ViewModeTabs />
+              </div>
+              <TodoNoteHeader rel={rel} editor={editor} />
             </>
           )}
           <EditorContent editor={editor} />
@@ -453,6 +541,22 @@ function buildSlashCommands(insertImage: (file: File) => Promise<void>): SlashCm
     { title: 'Todo list', hint: 'Checkboxes you can tick off', keywords: ['todo', 'check', 'task'], icon: i(CheckSquare), run: (e) => e.chain().focus().toggleTaskList().run() },
     { title: 'Quote', hint: 'Set off a passage', keywords: ['quote', 'blockquote'], icon: i(Quote), run: (e) => e.chain().focus().toggleBlockquote().run() },
     { title: 'Code block', hint: 'For code snippets', keywords: ['code', 'pre'], icon: i(Code), run: (e) => e.chain().focus().toggleCodeBlock().run() },
+    {
+      title: 'Mermaid diagram',
+      hint: 'Flowcharts, sequence, gantt — rendered live',
+      keywords: ['mermaid', 'diagram', 'flowchart', 'sequence', 'graph'],
+      icon: i(Workflow),
+      run: (e) =>
+        e
+          .chain()
+          .focus()
+          .insertContent({
+            type: 'codeBlock',
+            attrs: { language: 'mermaid' },
+            content: [{ type: 'text', text: 'graph TD\n  A[Start] --> B{Decision}\n  B -->|Yes| C[Do thing]\n  B -->|No| D[Skip]' }],
+          })
+          .run(),
+    },
     { title: 'Table', hint: 'Add/remove rows & columns from the toolbar', keywords: ['table', 'grid'], icon: i(TableIcon), run: (e) => e.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
     { title: 'Image', hint: 'From your computer', keywords: ['image', 'picture', 'photo'], icon: i(ImageIcon), run: () => {
       const input = document.createElement('input');

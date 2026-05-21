@@ -14,6 +14,11 @@ export interface FileTreeNode {
   path: string;
   rel: string;
   children?: FileTreeNode[];
+  /** Display-only grouping node (e.g. virtual Year/Month buckets inside Daily Notes).
+   *  Disk operations like rename/delete/move/create-here are suppressed for these. */
+  virtual?: boolean;
+  /** Hint to the tree renderer for the initial expanded state. Defaults to true. */
+  defaultOpen?: boolean;
 }
 
 export type ViewMode = 'editor' | 'graph' | 'all';

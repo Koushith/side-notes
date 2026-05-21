@@ -7,8 +7,9 @@ const WIKILINK_RE = /\[\[([^\]\n|]+?)(?:\|([^\]\n]+))?\]\]/g;
 // `[text](path.ext "title")`. We accept both syntaxes so attachment-style references (images,
 // `.pen`, `.base`, etc.) reach the graph as Obsidian-style ghost nodes.
 const MD_LINK_RE = /!?\[[^\]\n]*\]\(([^)\s"]+)(?:\s+"[^"]*")?\)/g;
-// File extensions Obsidian treats as graph-eligible — notes, canvases, common attachments.
-const LINKABLE_EXT_RE = /\.(md|canvas|base|pen|png|jpe?g|gif|webp|svg|pdf|mp3|mp4|webm|csv|json)$/i;
+// File extensions Obsidian treats as graph-eligible — notes (md/mdx/etc), canvases, common attachments.
+const LINKABLE_EXT_RE = /\.(md|markdown|mdx|mdown|mkd|mkdn|mdwn|canvas|base|pen|png|jpe?g|gif|webp|svg|pdf|mp3|mp4|webm|csv|json)$/i;
+const MARKDOWN_EXT_RE = /\.(md|markdown|mdx|mdown|mkd|mkdn|mdwn)$/i;
 // Only count #tag if not part of a heading (line start with #), code, or url fragment
 const TAG_RE = /(^|[\s(>])#([A-Za-z][A-Za-z0-9_\-/]{0,63})\b/g;
 
@@ -79,9 +80,9 @@ export function extractLinks(body: string, sourceRel?: string): string[] {
     const resolved = decoded.startsWith('/')
       ? decoded.replace(/^\/+/, '')
       : resolveRelPath(srcDir, decoded);
-    // Drop only the `.md` suffix — non-md attachments keep their extension so the graph
-    // can show them as distinct ghost nodes (e.g. `Obsidian Reference.png`).
-    out.add(/\.md$/i.test(resolved) ? resolved.replace(/\.md$/i, '') : resolved);
+    // Drop only the markdown suffix — non-markdown attachments keep their extension so the
+    // graph can show them as distinct ghost nodes (e.g. `Obsidian Reference.png`).
+    out.add(MARKDOWN_EXT_RE.test(resolved) ? resolved.replace(MARKDOWN_EXT_RE, '') : resolved);
   }
 
   return [...out];
@@ -122,7 +123,7 @@ export function parseNote(raw: string, fallbackTitle: string, sourceRel?: string
 export function resolveWikilink(target: string, files: { rel: string }[]): string | null {
   const norm = target.toLowerCase();
   // exact rel match
-  const exact = files.find((f) => f.rel.replace(/\.md$/i, '').toLowerCase() === norm);
+  const exact = files.find((f) => f.rel.replace(MARKDOWN_EXT_RE, '').toLowerCase() === norm);
   if (exact) return exact.rel;
   // basename match
   const base = files.find(
@@ -130,7 +131,7 @@ export function resolveWikilink(target: string, files: { rel: string }[]): strin
       f.rel
         .split(/[\\/]/)
         .pop()!
-        .replace(/\.md$/i, '')
+        .replace(MARKDOWN_EXT_RE, '')
         .toLowerCase() === norm
   );
   return base?.rel ?? null;

@@ -145,7 +145,7 @@ function readTheme(): ThemeKey {
   } catch {
     /* ignore */
   }
-  return 'paper';
+  return 'carbon';
 }
 
 function readMode(): Mode {
@@ -155,7 +155,7 @@ function readMode(): Mode {
   } catch {
     /* ignore */
   }
-  return 'light';
+  return 'dark';
 }
 
 function hexToRgb(hex: string): string {

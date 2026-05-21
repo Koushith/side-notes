@@ -4,7 +4,7 @@ import type { Editor as TiptapEditor } from '@tiptap/core';
 import type { WikilinkSuggestState } from './extensions/WikilinkSuggest';
 import { commitWikilink } from './extensions/WikilinkSuggest';
 import type { VaultFile } from '@/types';
-import { cn } from '@/lib/utils';
+import { cn, MARKDOWN_EXT_RE, stripMarkdownExt } from '@/lib/utils';
 
 interface Props {
   state: WikilinkSuggestState;
@@ -29,7 +29,7 @@ export function WikilinkAutocomplete({ state, editor, files, onCreate }: Props) 
         const title = (f.title || f.name).toLowerCase();
         const rel = f.rel.toLowerCase();
         let score = 0;
-        if (title === q || rel.replace(/\.md$/, '') === q) score = 100;
+        if (title === q || stripMarkdownExt(rel) === q) score = 100;
         else if (title.startsWith(q)) score = 80;
         else if (title.includes(q)) score = 60;
         else if (rel.includes(q)) score = 40;
@@ -110,7 +110,7 @@ export function WikilinkAutocomplete({ state, editor, files, onCreate }: Props) 
           <FileText size={13} className="text-text-subtle shrink-0" />
           <div className="flex-1 min-w-0">
             <div className="text-text truncate">{f.title || f.name}</div>
-            {f.rel !== `${f.name}.md` && (
+            {(MARKDOWN_EXT_RE.test(f.rel) ? stripMarkdownExt(f.rel) !== f.name : f.rel !== `${f.name}.canvas`) && (
               <div className="text-[10px] text-text-subtle truncate">{f.rel}</div>
             )}
           </div>

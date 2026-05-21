@@ -3,6 +3,8 @@ import { Search, FileText, Calendar, Network, Plus, FolderOpen, FileStack, Layou
 import { useVault } from '@/stores/vault';
 import { useOnboarding } from '@/stores/onboarding';
 import { cn, basenameNoExt } from '@/lib/utils';
+import { promptUser } from './PromptDialog';
+import { toast } from './Toast';
 
 interface Props {
   open: boolean;
@@ -127,10 +129,14 @@ export function CommandPalette({ open, onClose, onShowShortcuts, onShowWhatsNew,
         hint: 'Whiteboard with cards',
         icon: <LayoutGrid size={14} />,
         run: async () => {
-          const name = window.prompt('Canvas name:', 'Untitled canvas');
-          if (!name) return onClose();
-          await createCanvas(name.trim());
           onClose();
+          const name = await promptUser({
+            title: 'New Canvas',
+            defaultValue: 'Untitled canvas',
+            okLabel: 'Create',
+          });
+          if (!name) return;
+          await createCanvas(name.trim());
         },
       },
       {
@@ -197,14 +203,19 @@ export function CommandPalette({ open, onClose, onShowShortcuts, onShowWhatsNew,
         hint: t.rel,
         icon: <FileStack size={14} />,
         run: async () => {
-          const name = window.prompt('Name for the new note:', basenameNoExt(t.rel));
+          onClose();
+          const name = await promptUser({
+            title: 'New note from template',
+            message: t.rel,
+            defaultValue: basenameNoExt(t.rel),
+            okLabel: 'Create',
+          });
           if (!name) return;
           try {
             await createFromTemplate(t.rel, name);
           } catch (err) {
-            window.alert((err as Error).message);
+            toast.error((err as Error).message);
           }
-          onClose();
         },
       })),
     ];

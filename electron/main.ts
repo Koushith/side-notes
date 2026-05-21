@@ -69,6 +69,8 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      // Enable Chromium's built-in PDF viewer for in-tab PDF rendering. No extra deps.
+      plugins: true,
     },
   });
 
@@ -83,6 +85,49 @@ function createWindow() {
   } else {
     win.loadFile(path.join(RENDERER_DIST, 'index.html'));
   }
+}
+
+/** Resolve a vault-relative asset path to a concrete disk path, with fallbacks for
+ *  common publish-site conventions. Returns null when nothing matches. */
+async function resolveAssetPath(vaultRoot: string, rel: string): Promise<string | null> {
+  const root = path.normalize(vaultRoot);
+  const tryPath = (candidate: string): string | null => {
+    const full = path.normalize(path.join(root, candidate));
+    if (!full.startsWith(root)) return null; // sandbox guard
+    return existsSync(full) ? full : null;
+  };
+
+  // 1. Literal path.
+  const direct = tryPath(rel);
+  if (direct) return direct;
+
+  // 2. Strip a leading publish-site URL prefix like `blog/` or `blogs/`. Authors often
+  //    keep markdown references in their site's URL shape (`blog/<slug>/foo.png`) while
+  //    the on-disk layout doesn't actually nest under `blog/`.
+  const stripped = rel.replace(/^(blogs?|posts?|articles?|public)\//i, '');
+  if (stripped !== rel) {
+    const alt = tryPath(stripped);
+    if (alt) return alt;
+  }
+
+  // 3. Try the conventional Obsidian-style attachments folders.
+  const basename = rel.split('/').pop() ?? rel;
+  const slug = rel.split('/').slice(-2, -1)[0]; // parent folder of the file
+  const candidates: string[] = [];
+  if (slug) {
+    candidates.push(
+      `blogs/images/${slug}/${basename}`,
+      `blog/images/${slug}/${basename}`,
+      `images/${slug}/${basename}`,
+      `assets/${slug}/${basename}`
+    );
+  }
+  candidates.push(`assets/${basename}`, `images/${basename}`);
+  for (const c of candidates) {
+    const hit = tryPath(c);
+    if (hit) return hit;
+  }
+  return null;
 }
 
 // Register the vault:// scheme as privileged so it can be fetched, streamed, and bypass CSP for media.
@@ -103,16 +148,18 @@ app.whenReady().then(() => {
     }
   }
 
-  // Map vault://<rel-path> → <vaultPath>/<rel-path> on disk
+  // Map vault://<rel-path> → <vaultPath>/<rel-path> on disk.
+  // Falls back to a few common conventions (publish-site URL prefixes, sibling
+  // image folders) when the literal path doesn't exist, so authors don't have to
+  // rewrite published references like `blog/<slug>/foo.png` for local editing.
   protocol.handle('vault', async (req) => {
     try {
       if (!currentVault) return new Response('No vault open', { status: 404 });
       const u = new URL(req.url);
       const rel = decodeURIComponent(u.hostname + u.pathname).replace(/^\/+/, '');
-      const full = path.normalize(path.join(currentVault, rel));
-      // Prevent escaping the vault directory
-      if (!full.startsWith(currentVault)) return new Response('Forbidden', { status: 403 });
-      return net.fetch(pathToFileURL(full).toString());
+      const resolved = await resolveAssetPath(currentVault, rel);
+      if (!resolved) return new Response('Not found', { status: 404 });
+      return net.fetch(pathToFileURL(resolved).toString());
     } catch (err) {
       return new Response(String(err), { status: 500 });
     }
@@ -219,7 +266,9 @@ ipcMain.handle('vault:close', async () => {
 // Markdown + canvas are editable; the rest are visible as attachments (image previews,
 // design files, PDFs, etc.) so folders aren't mysteriously empty.
 const INDEXED_EXTS = new Set([
-  '.md', '.canvas', '.base',
+  // Markdown variants — all editable in the markdown editor.
+  '.md', '.markdown', '.mdx', '.mdown', '.mkd', '.mkdn', '.mdwn',
+  '.canvas', '.base',
   '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp',
   '.pdf', '.pen',
   '.mp3', '.mp4', '.webm', '.ogg', '.wav', '.m4a', '.mov',

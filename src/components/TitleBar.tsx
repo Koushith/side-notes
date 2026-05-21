@@ -22,6 +22,7 @@ import { useUi } from '@/stores/ui';
 import { ThemePicker } from './ThemePicker';
 import { cn } from '@/lib/utils';
 import { exportHtml, exportMarkdown, exportPdf } from '@/lib/export';
+import { toast } from './Toast';
 
 interface Props {
   onOpenPalette: () => void;
@@ -170,7 +171,7 @@ export function TitleBar({ onOpenPalette, onShowShortcuts, onShowWhatsNew, onSho
                 if (!activeFile || !vaultPath) return;
                 const title = files.get(activeFile)?.title || activeFile;
                 const html = onGetEditorHtml?.() ?? '';
-                await exportPdf(activeFile, title, html).catch((err) => window.alert(err.message));
+                await exportPdf(activeFile, title, html).catch((err) => toast.error(err.message));
               }}
             >
               Export as PDF
@@ -183,7 +184,7 @@ export function TitleBar({ onOpenPalette, onShowShortcuts, onShowWhatsNew, onSho
                 if (!activeFile) return;
                 const title = files.get(activeFile)?.title || activeFile;
                 const html = onGetEditorHtml?.() ?? '';
-                await exportHtml(activeFile, title, html).catch((err) => window.alert(err.message));
+                await exportHtml(activeFile, title, html).catch((err) => toast.error(err.message));
               }}
             >
               Export as HTML
@@ -194,7 +195,7 @@ export function TitleBar({ onOpenPalette, onShowShortcuts, onShowWhatsNew, onSho
               onClick={async () => {
                 setMoreOpen(false);
                 if (!activeFile || !vaultPath) return;
-                await exportMarkdown(vaultPath, activeFile).catch((err) => window.alert(err.message));
+                await exportMarkdown(vaultPath, activeFile).catch((err) => toast.error(err.message));
               }}
             >
               Export as Markdown
