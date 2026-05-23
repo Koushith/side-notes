@@ -35,10 +35,11 @@ jobs:
 
       - name: Build & package (macOS)
         if: matrix.os == 'macos-latest'
-        run: npm run package:mac -- --publish never
+        # Override mac.target to dmg+zip only. The 'mas' target in package.json
+        # needs a 3rd Party Mac Developer cert + provisioning profile and can't
+        # be built in CI. Drop it here; build it locally when you have certs.
+        run: npm run build && npx electron-builder --mac dmg zip --publish never
         env:
-          # Skip Apple notarisation for unsigned builds — the artifacts will work
-          # but macOS users will need to right-click → Open the first time.
           CSC_IDENTITY_AUTO_DISCOVERY: false
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
