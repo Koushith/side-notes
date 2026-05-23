@@ -35,23 +35,28 @@ jobs:
 
       - name: Build & package (macOS)
         if: matrix.os == 'macos-latest'
-        run: npm run package:mac
+        run: npm run package:mac -- --publish never
         env:
           # Skip Apple notarisation for unsigned builds — the artifacts will work
           # but macOS users will need to right-click → Open the first time.
           CSC_IDENTITY_AUTO_DISCOVERY: false
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build & package (Windows)
         if: matrix.os == 'windows-latest'
-        run: npm run package:win
+        run: npm run package:win -- --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build & package (Linux)
         if: matrix.os == 'ubuntu-latest'
-        run: npm run package:linux
+        run: npm run package:linux -- --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: side-${{ matrix.os }}
