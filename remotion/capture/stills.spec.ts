@@ -36,7 +36,13 @@ test('SideNotes v0.3.0 product stills', async () => {
       wins[0].setMenuBarVisibility(false);
     }
   });
-  await window.waitForTimeout(800);
+  await window.waitForTimeout(1000);
+
+  // ---- ONBOARDING SHOT — captured BEFORE we dismiss the first-run modal --
+  // The onboarding overlay is visible by default on a fresh user-data-dir.
+  const onboardingShotPath = path.join(SHOTS_DIR, '10-onboarding.png');
+  await window.screenshot({ path: onboardingShotPath });
+  console.log(`  📸 10-onboarding.png`);
 
   // Dismiss onboarding + mark "what's new" as seen so the modals don't pop.
   await window.keyboard.press('Escape');
@@ -132,6 +138,54 @@ test('SideNotes v0.3.0 product stills', async () => {
   } catch {}
   await hold(1200);
   await shot('08-allnotes');
+
+  // ----- 11 · Theme picker open ------------------------------------------
+  try {
+    await window.locator('button[title="Theme & Mode"]').first().click({ timeout: 1500 });
+    await hold(900);
+    await shot('11-theme');
+    // Click somewhere neutral to close
+    await window.keyboard.press('Escape');
+  } catch {}
+  await hold(400);
+
+  // ----- 12 · Canvas view -------------------------------------------------
+  try {
+    // Click the seeded 'Launch plan' canvas in the sidebar.
+    await window.getByText('Launch plan', { exact: true }).first().click({ timeout: 1500 });
+  } catch {}
+  await hold(2200);
+  await shot('12-canvas');
+
+  // The sidebar FileRow wraps each button in a draggable div, which intercepts
+  // Playwright's pointer events sometimes. Bypass via direct DOM .click().
+  const domClickByText = async (text: string, lastMatch = false) => {
+    await window.evaluate(
+      ({ text, lastMatch }) => {
+        const buttons = Array.from(document.querySelectorAll('button'));
+        const matches = buttons.filter((b) => b.textContent?.trim() === text);
+        const target = lastMatch ? matches[matches.length - 1] : matches[0];
+        if (target) (target as HTMLButtonElement).click();
+      },
+      { text, lastMatch }
+    );
+  };
+
+  // ----- 13 · Long-form journal note --------------------------------------
+  await domClickByText('journal'); // expand folder
+  await hold(500);
+  await domClickByText('on-shipping-quietly');
+  await hold(2000);
+  await shot('13-journal');
+
+  // ----- 14 · Project-style todo (sideprojects/todos/launch-plan) ---------
+  await domClickByText('sideprojects');
+  await hold(500);
+  await domClickByText('todos', true); // last 'todos' — under sideprojects
+  await hold(500);
+  await domClickByText('launch-plan');
+  await hold(1800);
+  await shot('14-todo-project');
 
   // ----- 09 · Themed delete confirm dialog --------------------------------
   // Right-click a daily note in the sidebar → click Delete → screenshot

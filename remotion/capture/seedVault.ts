@@ -305,7 +305,81 @@ export async function seedDemoVault(root: string): Promise<SeededVault> {
     ].join('\n')
   );
 
+  // ---- Seeded canvas — a small plan board ----
+  const canvasFile = {
+    version: 1,
+    nodes: [
+      { id: 'n1', type: 'text', x: -260, y: -180, width: 280, height: 100, text: '# v0.3.0 launch plan\n\nShip quietly. Tell quietly.' },
+      { id: 'n2', type: 'sticky', x: 80,   y: -200, width: 200, height: 120, text: 'Cut release video',                color: 'yellow' },
+      { id: 'n3', type: 'sticky', x: 80,   y: -50,  width: 200, height: 120, text: 'Update changelog\n(site + app)',    color: 'pink'   },
+      { id: 'n4', type: 'sticky', x: 80,   y: 100,  width: 200, height: 120, text: 'Schedule the launch tweet',         color: 'blue'   },
+      { id: 'n5', type: 'text',   x: 380,  y: -50,  width: 260, height: 110, text: '## Stretch\n- Mac App Store\n- Plugin API beta' },
+      { id: 'n6', type: 'file',   x: -260, y: 40,   width: 280, height: 150, file: 'sideprojects/todos/launch-plan.md' },
+    ],
+    edges: [
+      { id: 'e1', fromNode: 'n1', toNode: 'n2' },
+      { id: 'e2', fromNode: 'n1', toNode: 'n3' },
+      { id: 'e3', fromNode: 'n1', toNode: 'n4' },
+      { id: 'e4', fromNode: 'n3', toNode: 'n5', label: 'after' },
+    ],
+  };
+  await fs.writeFile(
+    path.join(vaultPath, 'Launch plan.canvas'),
+    JSON.stringify(canvasFile, null, 2)
+  );
+
   // ---- Pinned-worthy notes ----
+  // A richer, paragraph-y journal note — used for the "writing" shot.
+  const journalDir = path.join(vaultPath, 'journal');
+  await fs.mkdir(journalDir, { recursive: true });
+  await fs.writeFile(
+    path.join(journalDir, 'on-shipping-quietly.md'),
+    [
+      `---`,
+      `title: 'On shipping quietly'`,
+      `tags: ['writing', 'craft', 'release']`,
+      `---`,
+      ``,
+      `# On shipping quietly`,
+      ``,
+      `*A short note on what felt different about [[v030-changes]].*`,
+      ``,
+      `Every release feels like it should be loud. New thing! Big launch! Tell the world!`,
+      `And yet, the releases I've been happiest with have all been quiet.`,
+      ``,
+      `> The best feature is the one nobody has to learn — it just works the way you`,
+      `> expected it to, the first time you looked.`,
+      ``,
+      `## What changed this week`,
+      ``,
+      `The biggest fix in [[v030-changes]] is invisible. A file you edit on your phone`,
+      `now stays edited when you open it on your Mac. That's it. No screenshot, no demo`,
+      `loop. Just trust.`,
+      ``,
+      `The thing I'm most proud of, though, is the **todo header**. Every \`/todos/\``,
+      `folder gets a progress bar that ticks as you check things off. See [[2026-05-22]]`,
+      `for what that looks like in practice.`,
+      ``,
+      `## Three small things that matter`,
+      ``,
+      `1. **Carbon dark by default.** The first thing a new user sees should be the`,
+      `   theme the maker actually uses.`,
+      `2. **Themed dialogs.** No more grey system popups. Every prompt feels at home.`,
+      `3. **Pictures just show up.** Even when the path is a little off — see`,
+      `   [[launch-plan]] for the gnarly bits.`,
+      ``,
+      `## What's next`,
+      ``,
+      `- [ ] Mobile read-only viewer`,
+      `- [ ] Plugin API — five power users first`,
+      `- [ ] A real graph layout — current one is fine, not great`,
+      ``,
+      `Anyway. Back to writing.`,
+      ``,
+      `Tags: #writing #craft #release`,
+    ].join('\n')
+  );
+
   await fs.writeFile(
     path.join(vaultPath, 'Welcome.md'),
     [
