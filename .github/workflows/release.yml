@@ -59,6 +59,8 @@ jobs:
             release/*.dmg
             release/*.zip
             release/*.exe
+            release/*.appx
+            release/*.msix
             release/*.AppImage
             release/*.deb
           if-no-files-found: ignore

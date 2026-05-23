@@ -11,6 +11,9 @@
     "render-cinematic": "remotion render V030Cinematic out/v0.3.0-cinematic.mp4 --codec h264 --concurrency 4",
     "render-cinematic-audio": "REMOTION_AUDIO=1 remotion render V030Cinematic out/v0.3.0-cinematic-music.mp4 --codec h264 --concurrency 4",
     "capture": "node_modules/.bin/playwright test capture/capture.spec.ts",
+    "capture-stills": "node_modules/.bin/playwright test capture/stills.spec.ts",
+    "render-shots": "node scripts/render-shots.mjs",
+    "shots": "npm run capture-stills && npm run render-shots",
     "still": "remotion still V030 out/v0.3.0-frame.png --frame=0"
   },
   "dependencies": {

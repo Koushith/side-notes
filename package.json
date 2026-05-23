@@ -175,8 +175,8 @@
       "applicationId": "SideNotes",
       "displayName": "SideNotes",
       "publisherDisplayName": "Koushith",
-      "identityName": "REPLACE_WITH_PARTNER_CENTER_PACKAGE_NAME",
-      "publisher": "CN=REPLACE_WITH_PARTNER_CENTER_PUBLISHER_ID",
+      "identityName": "Koushith.SideNotess",
+      "publisher": "CN=8906BAE8-D162-4B04-B983-C612680FDF14",
       "backgroundColor": "#15130f",
       "languages": [
         "en-US"
