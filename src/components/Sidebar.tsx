@@ -11,6 +11,7 @@ import {
   FilePlus,
   FolderPlus,
   LayoutGrid,
+  PenTool,
   GitBranch,
 } from 'lucide-react';
 import { useVault } from '@/stores/vault';
@@ -84,9 +85,11 @@ export function Sidebar({ onOpenPalette, onOpenVaultSwitcher }: Props) {
         <span className="w-[22px] h-[22px] rounded-md bg-text text-bg grid place-items-center font-serif font-semibold italic text-[13px] shrink-0">
           S
         </span>
-        <span className="font-serif text-[16px] font-semibold tracking-tight text-text truncate flex-1 text-left">
+        <span className="font-serif text-[16px] font-semibold tracking-tight text-text truncate text-left">
           {vaultName}
         </span>
+        <span className="font-mono text-[9.5px] text-text-subtle shrink-0 mt-[3px]">v{__APP_VERSION__}</span>
+        <span className="flex-1" />
         <ChevronsUpDown size={13} className="text-text-subtle shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
       </button>
 
@@ -263,6 +266,7 @@ function SectionLabel({
 function NewItemMenu() {
   const createFile = useVault((s) => s.createFile);
   const createCanvas = useVault((s) => s.createCanvas);
+  const createExcalidraw = useVault((s) => s.createExcalidraw);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -332,6 +336,19 @@ function NewItemMenu() {
                 okLabel: 'Create',
               });
               if (name?.trim()) createCanvas(name.trim()).catch((err) => toast.error((err as Error).message));
+            }}
+          />
+          <NewItemMenuRow
+            icon={<PenTool size={13} />}
+            label="New Drawing"
+            onClick={async () => {
+              setOpen(false);
+              const name = await promptUser({
+                title: 'New Drawing',
+                defaultValue: 'Untitled drawing',
+                okLabel: 'Create',
+              });
+              if (name?.trim()) createExcalidraw(name.trim()).catch((err) => toast.error((err as Error).message));
             }}
           />
         </div>

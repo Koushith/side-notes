@@ -15,6 +15,7 @@ import {
   Pin,
   Megaphone,
   ShieldCheck,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { useVault } from '@/stores/vault';
 import { useTheme } from '@/stores/theme';
@@ -45,6 +46,7 @@ export function TitleBar({ onOpenPalette, onShowShortcuts, onShowWhatsNew, onSho
 
   const mode = useTheme((s) => s.mode);
   const toggleFocus = useUi((s) => s.toggleFocus);
+  const setAiSettingsOpen = useUi((s) => s.setAiSettingsOpen);
 
   const [moreOpen, setMoreOpen] = useState(false);
   const [themeOpen, setThemeOpen] = useState(false);
@@ -98,23 +100,18 @@ export function TitleBar({ onOpenPalette, onShowShortcuts, onShowWhatsNew, onSho
           />
         </button>
         <IconBtn
-          onClick={toggleFocus}
-          disabled={!activeFile || activeFile.endsWith('.canvas')}
-          title="Focus Mode (⌘.)"
+          onClick={() => openOrCreateDaily()}
+          disabled={!vaultPath}
+          title="Today's Daily Note (⌘D)"
         >
-          <Focus size={14} />
+          <Calendar size={14} />
         </IconBtn>
         <IconBtn
-          onClick={onShowWhatsNew}
-          title="What's New"
+          onClick={() => createFile('Untitled')}
+          disabled={!vaultPath}
+          title="New Note (⌘N)"
         >
-          <Megaphone size={14} />
-        </IconBtn>
-        <IconBtn
-          onClick={onShowShortcuts}
-          title="Keyboard Shortcuts (⌘/)"
-        >
-          <Keyboard size={14} />
+          <Plus size={14} />
         </IconBtn>
         <button
           ref={themeBtnRef}
@@ -136,18 +133,10 @@ export function TitleBar({ onOpenPalette, onShowShortcuts, onShowWhatsNew, onSho
           {mode === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
         </button>
         <IconBtn
-          onClick={() => openOrCreateDaily()}
-          disabled={!vaultPath}
-          title="Today's Daily Note (⌘D)"
+          onClick={() => setAiSettingsOpen(true)}
+          title="Assistant & Voice settings"
         >
-          <Calendar size={14} />
-        </IconBtn>
-        <IconBtn
-          onClick={() => createFile('Untitled')}
-          disabled={!vaultPath}
-          title="New Note (⌘N)"
-        >
-          <Plus size={14} />
+          <SlidersHorizontal size={14} />
         </IconBtn>
 
         <div className="relative">
@@ -163,6 +152,35 @@ export function TitleBar({ onOpenPalette, onShowShortcuts, onShowWhatsNew, onSho
             className="absolute right-0 top-full mt-1 z-50 w-52 rounded-lg border border-border bg-bg-elevated shadow-2xl py-1"
             onMouseLeave={() => setMoreOpen(false)}
           >
+            <Item
+              icon={<Focus size={13} />}
+              disabled={!activeFile || activeFile.endsWith('.canvas')}
+              onClick={() => {
+                setMoreOpen(false);
+                toggleFocus();
+              }}
+            >
+              Focus Mode
+            </Item>
+            <Item
+              icon={<Keyboard size={13} />}
+              onClick={() => {
+                setMoreOpen(false);
+                onShowShortcuts?.();
+              }}
+            >
+              Keyboard Shortcuts
+            </Item>
+            <Item
+              icon={<Megaphone size={13} />}
+              onClick={() => {
+                setMoreOpen(false);
+                onShowWhatsNew?.();
+              }}
+            >
+              What's New
+            </Item>
+            <div className="my-1 border-t border-border" />
             <Item
               icon={<PenSquare size={13} />}
               disabled={!activeFile}

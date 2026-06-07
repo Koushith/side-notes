@@ -32,6 +32,10 @@
   <key>com.apple.security.files.bookmarks.app-scope</key>
   <true/>
 
+  <!-- Microphone access for voice dictation (App Sandbox key). -->
+  <key>com.apple.security.device.microphone</key>
+  <true/>
+
   <!-- Outbound networking — we don't need it, but Electron's networking
        stack still initializes; leaving this off is safer and tells the
        reviewer the app is fully offline. Re-enable if you ever add sync. -->

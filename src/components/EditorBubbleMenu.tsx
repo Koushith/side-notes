@@ -1,5 +1,18 @@
 import { BubbleMenu, type Editor } from '@tiptap/react';
-import { Bold, Italic, Strikethrough, Code, Link2, Heading1, Heading2, Heading3 } from 'lucide-react';
+import {
+  Bold,
+  Italic,
+  Strikethrough,
+  Code,
+  Link2,
+  Heading1,
+  Heading2,
+  Heading3,
+  List,
+  ListOrdered,
+  ListChecks,
+  Quote,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { promptUser } from './PromptDialog';
 
@@ -70,6 +83,35 @@ export function EditorBubbleMenu({ editor }: Props) {
         title="Inline code"
       >
         <Code size={14} />
+      </ToolButton>
+      <Separator />
+      <ToolButton
+        active={isActive('bulletList')}
+        onClick={() => editor.chain().focus().toggleBulletList().run()}
+        title="Bullet list (⌘⇧8)"
+      >
+        <List size={14} />
+      </ToolButton>
+      <ToolButton
+        active={isActive('orderedList')}
+        onClick={() => editor.chain().focus().toggleOrderedList().run()}
+        title="Numbered list (⌘⇧7)"
+      >
+        <ListOrdered size={14} />
+      </ToolButton>
+      <ToolButton
+        active={isActive('taskList')}
+        onClick={() => editor.chain().focus().toggleTaskList().run()}
+        title="Task list (⌘⇧9)"
+      >
+        <ListChecks size={14} />
+      </ToolButton>
+      <ToolButton
+        active={isActive('blockquote')}
+        onClick={() => editor.chain().focus().toggleBlockquote().run()}
+        title="Quote"
+      >
+        <Quote size={14} />
       </ToolButton>
       <Separator />
       <ToolButton

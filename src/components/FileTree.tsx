@@ -7,6 +7,7 @@ import {
   FolderPlus,
   FilePlus,
   LayoutGrid,
+  PenTool,
   MoreHorizontal,
   Pencil,
   Trash2,
@@ -28,7 +29,7 @@ import { confirmUser } from './ConfirmDialog';
 import { toast } from './Toast';
 
 interface CreatingState {
-  kind: 'file' | 'folder';
+  kind: 'file' | 'folder' | 'drawing';
   parent: string;
 }
 
@@ -40,6 +41,7 @@ export function FileTree() {
   const pinned = useVault((s) => s.pinned);
   const pinnedOnly = useVault((s) => s.pinnedOnly);
   const createFile = useVault((s) => s.createFile);
+  const createExcalidraw = useVault((s) => s.createExcalidraw);
   const createFolder = useVault((s) => s.createFolder);
   const moveFile = useVault((s) => s.moveFile);
 
@@ -101,8 +103,22 @@ export function FileTree() {
     >
       {creating && creating.parent === '' && (
         <InlineInput
-          icon={creating.kind === 'folder' ? <Folder size={13} /> : <FileText size={13} />}
-          placeholder={creating.kind === 'folder' ? 'Folder name' : 'Note name'}
+          icon={
+            creating.kind === 'folder' ? (
+              <Folder size={13} />
+            ) : creating.kind === 'drawing' ? (
+              <PenTool size={13} />
+            ) : (
+              <FileText size={13} />
+            )
+          }
+          placeholder={
+            creating.kind === 'folder'
+              ? 'Folder name'
+              : creating.kind === 'drawing'
+                ? 'Drawing name'
+                : 'Note name'
+          }
           value={creatingValue}
           onChange={setCreatingValue}
           onCommit={async (v) => {
@@ -110,6 +126,8 @@ export function FileTree() {
             try {
               if (creating.kind === 'folder') {
                 await createFolder(v.trim());
+              } else if (creating.kind === 'drawing') {
+                await createExcalidraw(v.trim());
               } else {
                 await createFile(v.trim());
               }
@@ -167,6 +185,7 @@ function FolderNode({
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const moveFile = useVault((s) => s.moveFile);
   const createFile = useVault((s) => s.createFile);
+  const createExcalidraw = useVault((s) => s.createExcalidraw);
   const createFolder = useVault((s) => s.createFolder);
   const deleteFolder = useVault((s) => s.deleteFolder);
   const vaultPath = useVault((s) => s.vaultPath);
@@ -183,6 +202,15 @@ function FolderNode({
           icon: <FilePlus size={13} />,
           onClick: () => {
             setCreating({ kind: 'file', parent: node.rel });
+            setCreatingValue('');
+            setOpen(true);
+          },
+        },
+        {
+          label: 'New Drawing Here',
+          icon: <PenTool size={13} />,
+          onClick: () => {
+            setCreating({ kind: 'drawing', parent: node.rel });
             setCreatingValue('');
             setOpen(true);
           },
@@ -311,8 +339,22 @@ function FolderNode({
         <div>
           {creating && creating.parent === node.rel && (
             <InlineInput
-              icon={creating.kind === 'folder' ? <Folder size={13} /> : <FileText size={13} />}
-              placeholder={creating.kind === 'folder' ? 'Folder name' : 'Note name'}
+              icon={
+                creating.kind === 'folder' ? (
+                  <Folder size={13} />
+                ) : creating.kind === 'drawing' ? (
+                  <PenTool size={13} />
+                ) : (
+                  <FileText size={13} />
+                )
+              }
+              placeholder={
+                creating.kind === 'folder'
+                  ? 'Folder name'
+                  : creating.kind === 'drawing'
+                    ? 'Drawing name'
+                    : 'Note name'
+              }
               value={creatingValue}
               onChange={setCreatingValue}
               onCommit={async (v) => {
@@ -321,6 +363,8 @@ function FolderNode({
                   const path = `${node.rel}/${v.trim()}`;
                   if (creating.kind === 'folder') {
                     await createFolder(path);
+                  } else if (creating.kind === 'drawing') {
+                    await createExcalidraw(path);
                   } else {
                     await createFile(path);
                   }

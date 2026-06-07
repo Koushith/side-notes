@@ -1,6 +1,6 @@
 import { api } from '@/lib/api';
 import { parseNote } from '@/lib/markdown';
-import { basenameNoExt, isMarkdownPath, isViewablePath, joinPath, stripMarkdownExt } from '@/lib/utils';
+import { basenameNoExt, isExcalidrawPath, isMarkdownPath, isViewablePath, joinPath, stripMarkdownExt } from '@/lib/utils';
 import type { FileTreeNode, VaultFile, ViewMode } from '@/types';
 import { create } from 'zustand';
 
@@ -29,6 +29,7 @@ interface VaultState {
   saveFile: (rel: string, content: string) => Promise<void>;
   createFile: (relPath: string) => Promise<string>;
   createCanvas: (relPath: string) => Promise<string>;
+  createExcalidraw: (relPath: string) => Promise<string>;
   renameFile: (rel: string, newRel: string) => Promise<void>;
   deleteFile: (rel: string) => Promise<void>;
   createFolder: (relPath: string) => Promise<void>;
@@ -223,7 +224,13 @@ export const useVault = create<VaultState>((set, get) => ({
     // Markdown + canvas go to their editors; images and PDFs open in the AttachmentViewer.
     // Anything else (.pen, .base, …) stays click-no-op until a dedicated viewer exists.
     const lower = rel.toLowerCase();
-    if (!isMarkdownPath(lower) && !lower.endsWith('.canvas') && !isViewablePath(lower)) return;
+    if (
+      !isMarkdownPath(lower) &&
+      !lower.endsWith('.canvas') &&
+      !isExcalidrawPath(lower) &&
+      !isViewablePath(lower)
+    )
+      return;
     set((s) => {
       const tabs = s.tabs.includes(rel) ? s.tabs : [...s.tabs, rel];
       return { activeFile: rel, view: 'editor', tabs };
@@ -271,6 +278,33 @@ export const useVault = create<VaultState>((set, get) => ({
       i++;
     }
     const initial = JSON.stringify({ version: 1, nodes: [], edges: [] }, null, 2);
+    await api.files.create(vp, rel, initial);
+    const indexed = await indexFile(vp, rel, Date.now());
+    set((s) => {
+      const m = new Map(s.files);
+      m.set(rel, indexed);
+      const tabs = s.tabs.includes(rel) ? s.tabs : [...s.tabs, rel];
+      return { files: m, activeFile: rel, view: 'editor', tabs };
+    });
+    return rel;
+  },
+
+  async createExcalidraw(relPath: string) {
+    const vp = get().vaultPath;
+    if (!vp) throw new Error('No vault');
+    let rel = relPath.endsWith('.excalidraw') ? relPath : `${relPath}.excalidraw`;
+    let i = 1;
+    while (get().files.has(rel)) {
+      const base = relPath.replace(/\.excalidraw$/i, '');
+      rel = `${base} ${i}.excalidraw`;
+      i++;
+    }
+    // The standard .excalidraw scene format — an empty drawing.
+    const initial = JSON.stringify(
+      { type: 'excalidraw', version: 2, source: 'SideNotes', elements: [], appState: {}, files: {} },
+      null,
+      2
+    );
     await api.files.create(vp, rel, initial);
     const indexed = await indexFile(vp, rel, Date.now());
     set((s) => {

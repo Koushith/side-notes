@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Search, FileText, Calendar, Network, Plus, FolderOpen, FileStack, LayoutGrid, Keyboard, BookOpen } from 'lucide-react';
+import { Search, FileText, Calendar, Network, Plus, FolderOpen, FileStack, LayoutGrid, Keyboard, BookOpen, Bot, PenTool } from 'lucide-react';
 import { useVault } from '@/stores/vault';
+import { useUi } from '@/stores/ui';
 import { useOnboarding } from '@/stores/onboarding';
 import { cn, basenameNoExt } from '@/lib/utils';
 import { promptUser } from './PromptDialog';
@@ -39,7 +40,9 @@ export function CommandPalette({ open, onClose, onShowShortcuts, onShowWhatsNew,
 
   const createFromTemplate = useVault((s) => s.createFromTemplate);
   const createCanvas = useVault((s) => s.createCanvas);
+  const createExcalidraw = useVault((s) => s.createExcalidraw);
   const startOnboarding = useOnboarding((s) => s.start);
+  const setAiSettingsOpen = useUi((s) => s.setAiSettingsOpen);
 
   const templates = useMemo(
     () => [...files.values()].filter((f) => f.rel.startsWith('templates/')),
@@ -141,6 +144,22 @@ export function CommandPalette({ open, onClose, onShowShortcuts, onShowWhatsNew,
       },
       {
         kind: 'action',
+        title: 'New Drawing',
+        hint: 'Excalidraw sketch',
+        icon: <PenTool size={14} />,
+        run: async () => {
+          onClose();
+          const name = await promptUser({
+            title: 'New Drawing',
+            defaultValue: 'Untitled drawing',
+            okLabel: 'Create',
+          });
+          if (!name) return;
+          await createExcalidraw(name.trim());
+        },
+      },
+      {
+        kind: 'action',
         title: 'Open Today',
         hint: 'Daily note',
         icon: <Calendar size={14} />,
@@ -166,6 +185,16 @@ export function CommandPalette({ open, onClose, onShowShortcuts, onShowWhatsNew,
         run: () => {
           onClose();
           onOpenVaultSwitcher?.();
+        },
+      },
+      {
+        kind: 'action',
+        title: 'AI settings',
+        hint: '⌘,',
+        icon: <Bot size={14} />,
+        run: () => {
+          onClose();
+          setAiSettingsOpen(true);
         },
       },
       {
@@ -222,7 +251,7 @@ export function CommandPalette({ open, onClose, onShowShortcuts, onShowWhatsNew,
     if (!query) return all;
     const q = query.toLowerCase();
     return all.filter((a) => a.title.toLowerCase().includes(q));
-  }, [query, createFile, openOrCreateDaily, setView, onClose, templates, createFromTemplate, createCanvas, onShowShortcuts, startOnboarding, onOpenVaultSwitcher]);
+  }, [query, createFile, openOrCreateDaily, setView, onClose, templates, createFromTemplate, createCanvas, createExcalidraw, onShowShortcuts, startOnboarding, onOpenVaultSwitcher, setAiSettingsOpen, onShowWhatsNew]);
 
   const allHits = useMemo(() => [...fileHits, ...actionHits], [fileHits, actionHits]);
 

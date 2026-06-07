@@ -7,6 +7,32 @@ const CHANGELOG: {
   sections: { label: 'New' | 'Fixed' | 'Removed'; items: string[] }[];
 }[] = [
   {
+    version: '0.4.0',
+    date: 'June 2026',
+    sections: [
+      {
+        label: 'New',
+        items: [
+          'Voice dictation — hold a key and speak; your words are transcribed and dropped at the cursor. Choose a cloud model (OpenAI gpt-4o-transcribe, or Groq) for top accuracy, or run Whisper fully offline on your machine. Optional AI cleanup removes filler words and adds punctuation',
+          'Excalidraw drawings — create freehand sketches and diagrams as .excalidraw files right in your vault (New Drawing in the + menu, command palette, or by right-clicking a folder). Fully offline, autosaves as you draw',
+          'Source Control, rebuilt — the panel now updates live as you edit, surfaces the next action (a prominent "Push to GitHub" when you\'re ahead), shows an honest "Up to date" state, and Commit auto-stages your changes so you never have to think about staging',
+          'Test connection — verify your AI provider or voice model works from Settings before relying on it',
+          'Assistant panel now shows at a glance whether it\'s set up and which model is active, with a one-click "Set up AI" when it isn\'t',
+          'Version number now sits next to the SideNotes logo',
+        ],
+      },
+      {
+        label: 'Fixed',
+        items: [
+          'Source Control no longer shows a stale ahead/behind count — push now reliably sets the upstream on first push, and git errors (auth, network, conflicts) are shown in plain English instead of raw stderr',
+          'Create / OK buttons in dialogs are now readable on every theme (were light-on-light in dark themes)',
+          'AI settings decluttered — API key and model come first, with the endpoint Base URL tucked under Advanced',
+          'Top bar trimmed from nine icons to six; less-used actions moved into the ⋯ menu',
+        ],
+      },
+    ],
+  },
+  {
     version: '0.3.0',
     date: 'May 2026',
     sections: [

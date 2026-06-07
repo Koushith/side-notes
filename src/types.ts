@@ -64,6 +64,26 @@ export interface AISettingsUpdate {
   };
 }
 
+export type VoiceEngine = 'cloud' | 'local';
+
+export interface VoiceSettingsView {
+  engine: VoiceEngine;
+  cloud: { baseUrl: string; model: string; hasKey: boolean };
+  local: { model: string };
+  language: string;
+  vocab: string;
+  cleanup: boolean;
+}
+
+export interface VoiceSettingsUpdate {
+  engine?: VoiceEngine;
+  cloud?: { baseUrl?: string; model?: string; apiKey?: string | null };
+  local?: { model?: string };
+  language?: string;
+  vocab?: string;
+  cleanup?: boolean;
+}
+
 // Mirror of electron/preload.ts API surface (kept in sync manually).
 export interface ApiBridge {
   vault: {
@@ -123,6 +143,19 @@ export interface ApiBridge {
     onChunk: (id: string, handler: (delta: string) => void) => () => void;
     onDone: (id: string, handler: () => void) => () => void;
     onError: (id: string, handler: (msg: string) => void) => () => void;
+  };
+  voice: {
+    getSettings: () => Promise<VoiceSettingsView>;
+    setSettings: (update: VoiceSettingsUpdate) => Promise<VoiceSettingsView>;
+    requestMic: () => Promise<boolean>;
+    transcribe: (
+      id: string,
+      payload:
+        | { kind: 'cloud'; audio: ArrayBuffer; mimeType: string }
+        | { kind: 'local'; pcm: Float32Array }
+    ) => Promise<{ ok: true; text: string } | { ok: false; error: string }>;
+    cancel: (id: string) => Promise<boolean>;
+    onProgress: (id: string, handler: (msg: string) => void) => () => void;
   };
 }
 

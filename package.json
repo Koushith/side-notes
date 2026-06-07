@@ -1,6 +1,6 @@
 {
   "name": "second-brain",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "A friendly second brain for everyone — Obsidian-style, Notion-easy.",
   "author": {
     "name": "Koushith",
@@ -10,8 +10,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "postinstall": "node scripts/rename-electron-dev.mjs",
+    "postinstall": "node scripts/rename-electron-dev.mjs && node scripts/copy-excalidraw-assets.mjs",
+    "copy:excalidraw": "node scripts/copy-excalidraw-assets.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.node.json",
+    "prebuild": "node scripts/copy-excalidraw-assets.mjs",
     "build": "npm run typecheck && vite build",
     "package": "npm run build && electron-builder",
     "package:mac": "npm run build && electron-builder --mac",
@@ -21,6 +23,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1058.0",
+    "@excalidraw/excalidraw": "^0.18.1",
     "@fontsource-variable/inter": "^5.2.8",
     "@fontsource-variable/jetbrains-mono": "^5.2.8",
     "@fontsource-variable/source-serif-4": "^5.2.9",
@@ -117,14 +120,20 @@
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
       "icon": "build/icon.icns",
-      "notarize": false
+      "notarize": false,
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "SideNotes uses the microphone to transcribe your speech into notes when you dictate."
+      }
     },
     "mas": {
       "category": "public.app-category.productivity",
       "entitlements": "build/entitlements.mas.plist",
       "entitlementsInherit": "build/entitlements.mas.plist",
       "hardenedRuntime": true,
-      "provisioningProfile": "build/SideNotes.provisionprofile"
+      "provisioningProfile": "build/SideNotes.provisionprofile",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "SideNotes uses the microphone to transcribe your speech into notes when you dictate."
+      }
     },
     "dmg": {
       "title": "SideNotes ${version} ${arch}",

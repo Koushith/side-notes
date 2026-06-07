@@ -139,7 +139,7 @@ export function PromptHost() {
           </button>
           <button
             onClick={submit}
-            className="px-3 py-1.5 text-[12.5px] rounded-md bg-accent text-accent-ink hover:opacity-90 transition-opacity"
+            className="px-3 py-1.5 text-[12.5px] font-medium rounded-md bg-accent text-bg hover:bg-accent-hover transition-colors"
           >
             {options.okLabel ?? 'OK'}
           </button>

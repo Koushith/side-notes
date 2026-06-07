@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { api } from '@/lib/api';
 import { useVault } from '@/stores/vault';
 import { useGit } from '@/stores/git';
 import { useEditorRef } from '@/stores/editorRef';
@@ -10,6 +11,7 @@ import { TabBar } from '@/components/TabBar';
 import { Editor } from '@/components/Editor';
 import { RawEditor } from '@/components/RawEditor';
 import { CanvasView } from '@/components/CanvasView';
+import { ExcalidrawView } from '@/components/ExcalidrawView';
 import { AttachmentViewer } from '@/components/AttachmentViewer';
 import { isViewablePath as isViewable } from '@/lib/utils';
 import { GraphView } from '@/components/GraphView';
@@ -24,6 +26,8 @@ import { ShortcutsHelp } from '@/components/ShortcutsHelp';
 import { WhatsNew, shouldShowWhatsNew, markWhatsNewSeen } from '@/components/WhatsNew';
 import { About } from '@/components/About';
 import { VaultSwitcher } from '@/components/VaultSwitcher';
+import { AISettings } from '@/components/AISettings';
+import { VoiceDictation } from '@/components/VoiceDictation';
 import { PromptHost } from '@/components/PromptDialog';
 import { ConfirmHost } from '@/components/ConfirmDialog';
 import { ToastHost } from '@/components/Toast';
@@ -42,6 +46,8 @@ export default function App() {
   const toggleFocus = useUi((s) => s.toggleFocus);
   const setFocusMode = useUi((s) => s.setFocusMode);
   const rawMode = useUi((s) => s.rawMode);
+  const aiSettingsOpen = useUi((s) => s.aiSettingsOpen);
+  const setAiSettingsOpen = useUi((s) => s.setAiSettingsOpen);
 
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -67,6 +73,25 @@ export default function App() {
   // before the user opens the panel.
   useEffect(() => {
     if (vaultPath) useGit.getState().refresh();
+  }, [vaultPath]);
+
+  // Keep git status live: debounce-refresh whenever files change on disk (edits,
+  // creates, deletes, pulls). Without this the Source Control panel + sidebar
+  // change badge go stale until you manually refresh or reopen the panel.
+  useEffect(() => {
+    if (!vaultPath) return;
+    let timer: number | null = null;
+    const unsubscribe = api.watch.onEvent(() => {
+      if (timer) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        // Don't fight an in-flight git action — it refreshes itself when done.
+        if (!useGit.getState().busy) useGit.getState().refresh();
+      }, 400);
+    });
+    return () => {
+      if (timer) window.clearTimeout(timer);
+      unsubscribe();
+    };
   }, [vaultPath]);
 
   // First-run: surface the onboarding tour automatically.
@@ -106,6 +131,10 @@ export default function App() {
       } else if (e.key === '/') {
         e.preventDefault();
         setShortcutsOpen((v) => !v);
+      } else if (e.key === ',') {
+        // macOS convention for "preferences" — opens the AI/global settings modal.
+        e.preventDefault();
+        setAiSettingsOpen(!useUi.getState().aiSettingsOpen);
       }
     };
     const onEscape = (e: KeyboardEvent) => {
@@ -119,7 +148,7 @@ export default function App() {
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('keydown', onEscape);
     };
-  }, [setView, createFile, openOrCreateDaily, vaultPath, activeFile, closeTab, toggleFocus, setFocusMode]);
+  }, [setView, createFile, openOrCreateDaily, vaultPath, activeFile, closeTab, toggleFocus, setFocusMode, setAiSettingsOpen]);
 
   if (!vaultPath) {
     return (
@@ -130,6 +159,7 @@ export default function App() {
         <WhatsNew open={whatsNewOpen} onClose={() => setWhatsNewOpen(false)} />
         <About open={aboutOpen} onClose={() => setAboutOpen(false)} />
         <VaultSwitcher open={vaultSwitcherOpen} onClose={() => setVaultSwitcherOpen(false)} />
+        <AISettings open={aiSettingsOpen} onClose={() => setAiSettingsOpen(false)} />
         <PromptHost />
         <ConfirmHost />
         <ToastHost />
@@ -170,6 +200,8 @@ export default function App() {
               ) : activeFile ? (
                 activeFile.endsWith('.canvas') ? (
                   <CanvasView key={activeFile} rel={activeFile} vaultPath={vaultPath} />
+                ) : activeFile.endsWith('.excalidraw') ? (
+                  <ExcalidrawView key={activeFile} rel={activeFile} vaultPath={vaultPath} />
                 ) : isViewable(activeFile) ? (
                   <AttachmentViewer key={activeFile} rel={activeFile} vaultPath={vaultPath} />
                 ) : rawMode ? (
@@ -206,6 +238,8 @@ export default function App() {
       <WhatsNew open={whatsNewOpen} onClose={() => setWhatsNewOpen(false)} />
       <About open={aboutOpen} onClose={() => setAboutOpen(false)} />
       <VaultSwitcher open={vaultSwitcherOpen} onClose={() => setVaultSwitcherOpen(false)} />
+      <AISettings open={aiSettingsOpen} onClose={() => setAiSettingsOpen(false)} />
+      <VoiceDictation />
       <PromptHost />
       <ConfirmHost />
       <ToastHost />

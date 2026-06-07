@@ -31,13 +31,19 @@ export function isViewablePath(p: string): boolean {
   return isImagePath(p) || isPdfPath(p);
 }
 
+export const EXCALIDRAW_EXT_RE = /\.excalidraw$/i;
+
+export function isExcalidrawPath(p: string): boolean {
+  return EXCALIDRAW_EXT_RE.test(p);
+}
+
 export function stripMarkdownExt(p: string): string {
   return p.replace(MARKDOWN_EXT_RE, '');
 }
 
 export function basenameNoExt(p: string) {
   const base = p.split(/[\\/]/).pop() ?? p;
-  return base.replace(MARKDOWN_EXT_RE, '').replace(/\.canvas$/i, '');
+  return base.replace(MARKDOWN_EXT_RE, '').replace(/\.canvas$/i, '').replace(EXCALIDRAW_EXT_RE, '');
 }
 
 export function joinPath(...parts: string[]) {

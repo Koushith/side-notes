@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, session, protocol, net, safeStorage, Menu, MenuItem } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell, session, protocol, net, safeStorage, systemPreferences, Menu, MenuItem } from 'electron';
 import { pathToFileURL } from 'node:url';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -9,6 +9,7 @@ import chokidar, { FSWatcher } from 'chokidar';
 import pkg from 'electron-updater';
 import { simpleGit, type SimpleGit } from 'simple-git';
 import { generate as aiGenerate, listOllamaModels, type AIProvider } from './ai';
+import { transcribeCloud, transcribeLocal } from './voice';
 const { autoUpdater } = pkg;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -49,10 +50,26 @@ interface AISettingsStored {
   };
 }
 
+type VoiceEngine = 'cloud' | 'local';
+
+interface VoiceSettingsStored {
+  engine: VoiceEngine;
+  /** OpenAI-compatible STT endpoint (OpenAI, Groq, …). */
+  cloud: { baseUrl: string; model: string; encKey?: string };
+  local: { model: string };
+  /** ISO-639-1 hint, '' = auto-detect. */
+  language: string;
+  /** Proper-noun / jargon bias passed to the model. */
+  vocab: string;
+  /** Run the transcript through the AI provider for filler-removal + punctuation. */
+  cleanup: boolean;
+}
+
 interface Settings {
   vaultPath?: string;
   recentVaults?: string[];
   ai?: AISettingsStored;
+  voice?: VoiceSettingsStored;
 }
 
 async function readSettings(): Promise<Settings> {
@@ -243,13 +260,38 @@ app.whenReady().then(() => {
           // Fonts are bundled into the renderer, so the production CSP has no
           // remote allow-list — the app makes zero outbound network requests.
           'Content-Security-Policy': [
-            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: vault:; connect-src 'self';",
+            // blob: + worker-src are needed by Excalidraw (embedded images, export, web workers).
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: vault:; connect-src 'self' blob:; worker-src 'self' blob:;",
           ],
         },
       });
     });
   }
+
+  // Microphone access for voice dictation. The renderer's getUserMedia triggers a
+  // 'media' permission request; grant it (the OS still shows its own prompt on
+  // macOS, gated by NSMicrophoneUsageDescription in the Info.plist).
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, cb) => {
+    cb(permission === 'media' || permission === 'mediaKeySystem');
+  });
+  session.defaultSession.setPermissionCheckHandler((_wc, permission) => {
+    return permission === 'media';
+  });
+
   createWindow();
+});
+
+// Ask macOS for microphone access up front when the renderer requests it, so the
+// system prompt appears the first time the user tries to dictate.
+ipcMain.handle('voice:requestMic', async (): Promise<boolean> => {
+  if (process.platform !== 'darwin') return true;
+  try {
+    const status = systemPreferences.getMediaAccessStatus('microphone');
+    if (status === 'granted') return true;
+    return await systemPreferences.askForMediaAccess('microphone');
+  } catch {
+    return false;
+  }
 });
 
 app.on('window-all-closed', () => {
@@ -478,10 +520,45 @@ function gitFor(vaultPath: string): SimpleGit {
 }
 
 function gitErr(e: unknown): GitErr {
-  const msg = e instanceof Error ? e.message : String(e);
+  const raw = e instanceof Error ? e.message : String(e);
   // Surface to the dev terminal so the underlying git stderr is visible while iterating.
-  console.warn('[git] error:', msg);
-  return { ok: false, error: msg };
+  console.warn('[git] error:', raw);
+  return { ok: false, error: friendlyGitError(raw) };
+}
+
+// Map noisy git stderr into a short, actionable message. Falls back to the raw
+// text (trimmed) when nothing matches.
+function friendlyGitError(raw: string): string {
+  const m = raw.toLowerCase();
+  if (m.includes('could not resolve host') || m.includes('failed to connect') || m.includes('network is unreachable')) {
+    return 'Network error — can’t reach the remote. Check your internet connection.';
+  }
+  if (
+    m.includes('authentication failed') ||
+    m.includes('could not read username') ||
+    m.includes('terminal prompts disabled') ||
+    m.includes('permission denied (publickey)') ||
+    m.includes('invalid credentials')
+  ) {
+    return 'Authentication failed. For HTTPS remotes, set up a git credential helper (e.g. `git config --global credential.helper osxkeychain` and authenticate once in Terminal); for SSH, make sure your key is loaded.';
+  }
+  if (m.includes('no upstream') || m.includes('no configured push destination') || m.includes('set-upstream')) {
+    return 'This branch has no upstream yet. Push once to set it up.';
+  }
+  if (m.includes('rejected') && (m.includes('non-fast-forward') || m.includes('fetch first'))) {
+    return 'Remote has changes you don’t have yet. Pull first, then push.';
+  }
+  if (m.includes('merge conflict') || m.includes('conflict')) {
+    return 'Merge conflict — resolve it in your editor or Terminal, then commit.';
+  }
+  if (m.includes('not found') && m.includes('git')) {
+    return 'Git isn’t available to the app. Install the Xcode Command Line Tools (`xcode-select --install`) or ensure git is on your PATH.';
+  }
+  if (m.includes('please tell me who you are') || m.includes('empty ident') || m.includes('user.email')) {
+    return 'Git identity not set. Run `git config --global user.name "…"` and `git config --global user.email "…"` once.';
+  }
+  // Trim simple-git's wrapper prefix for a cleaner message.
+  return raw.replace(/^Error:\s*/i, '').split('\n')[0].slice(0, 300);
 }
 
 export interface GitFileEntry {
@@ -593,7 +670,19 @@ ipcMain.handle('git:commit', async (_e, vaultPath: string, message: string): Pro
 
 ipcMain.handle('git:push', async (_e, vaultPath: string): Promise<GitVoid> => {
   try {
-    await gitFor(vaultPath).push();
+    const git = gitFor(vaultPath);
+    const status = await git.status();
+    if (status.tracking) {
+      await git.push();
+    } else {
+      // First push on this branch — set the upstream so future pushes "just work".
+      const remotes = await git.getRemotes(false);
+      if (!remotes.length) {
+        throw new Error('No remote configured. Add one with: git remote add origin <url>');
+      }
+      if (!status.current) throw new Error('No current branch to push.');
+      await git.push(['-u', remotes[0].name, status.current]);
+    }
     return { ok: true };
   } catch (e) {
     return gitErr(e);
@@ -623,6 +712,15 @@ const DEFAULT_AI_SETTINGS: AISettingsStored = {
     region: 'us-east-1',
     model: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
   },
+};
+
+const DEFAULT_VOICE_SETTINGS: VoiceSettingsStored = {
+  engine: 'cloud',
+  cloud: { baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-transcribe' },
+  local: { model: 'Xenova/whisper-base.en' },
+  language: '',
+  vocab: '',
+  cleanup: true,
 };
 
 function encryptKey(plain: string): string | undefined {
@@ -659,6 +757,16 @@ interface AISettingsView {
   bedrock: { region: string; model: string; hasCreds: boolean };
 }
 
+/** Renderer-safe voice view — STT key replaced with a hasKey flag. */
+interface VoiceSettingsView {
+  engine: VoiceEngine;
+  cloud: { baseUrl: string; model: string; hasKey: boolean };
+  local: { model: string };
+  language: string;
+  vocab: string;
+  cleanup: boolean;
+}
+
 function toView(s: AISettingsStored): AISettingsView {
   return {
     provider: s.provider,
@@ -683,6 +791,30 @@ async function readAISettings(): Promise<AISettingsStored> {
     openai: { ...DEFAULT_AI_SETTINGS.openai, ...ai.openai },
     anthropic: { ...DEFAULT_AI_SETTINGS.anthropic, ...ai.anthropic },
     bedrock: { ...DEFAULT_AI_SETTINGS.bedrock, ...ai.bedrock },
+  };
+}
+
+async function readVoiceSettings(): Promise<VoiceSettingsStored> {
+  const s = await readSettings();
+  const v = s.voice ?? DEFAULT_VOICE_SETTINGS;
+  return {
+    engine: v.engine ?? DEFAULT_VOICE_SETTINGS.engine,
+    cloud: { ...DEFAULT_VOICE_SETTINGS.cloud, ...v.cloud },
+    local: { ...DEFAULT_VOICE_SETTINGS.local, ...v.local },
+    language: v.language ?? DEFAULT_VOICE_SETTINGS.language,
+    vocab: v.vocab ?? DEFAULT_VOICE_SETTINGS.vocab,
+    cleanup: v.cleanup ?? DEFAULT_VOICE_SETTINGS.cleanup,
+  };
+}
+
+function voiceToView(v: VoiceSettingsStored): VoiceSettingsView {
+  return {
+    engine: v.engine,
+    cloud: { baseUrl: v.cloud.baseUrl, model: v.cloud.model, hasKey: !!v.cloud.encKey },
+    local: { model: v.local.model },
+    language: v.language,
+    vocab: v.vocab,
+    cleanup: v.cleanup,
   };
 }
 
@@ -854,6 +986,116 @@ ipcMain.handle('ai:cancel', async (_e, id: string): Promise<boolean> => {
   if (a) {
     a.abort();
     aiAborters.delete(id);
+    return true;
+  }
+  return false;
+});
+
+// ---- IPC: Voice (speech-to-text) ----
+
+ipcMain.handle('voice:settings:get', async (): Promise<VoiceSettingsView> => {
+  return voiceToView(await readVoiceSettings());
+});
+
+ipcMain.handle(
+  'voice:settings:set',
+  async (
+    _e,
+    update: {
+      engine?: VoiceEngine;
+      cloud?: { baseUrl?: string; model?: string; apiKey?: string | null };
+      local?: { model?: string };
+      language?: string;
+      vocab?: string;
+      cleanup?: boolean;
+    }
+  ): Promise<VoiceSettingsView> => {
+    const settings = await readSettings();
+    const cur = await readVoiceSettings();
+    const resolveSecret = (
+      next: string | null | undefined,
+      prev: string | undefined
+    ): string | undefined => {
+      if (next === undefined) return prev;
+      if (next === null) return undefined;
+      return next ? encryptKey(next) : prev;
+    };
+    const next: VoiceSettingsStored = {
+      engine: update.engine ?? cur.engine,
+      cloud: {
+        baseUrl: update.cloud?.baseUrl ?? cur.cloud.baseUrl,
+        model: update.cloud?.model ?? cur.cloud.model,
+        encKey:
+          update.cloud && 'apiKey' in update.cloud
+            ? resolveSecret(update.cloud.apiKey, cur.cloud.encKey)
+            : cur.cloud.encKey,
+      },
+      local: { model: update.local?.model ?? cur.local.model },
+      language: update.language ?? cur.language,
+      vocab: update.vocab ?? cur.vocab,
+      cleanup: update.cleanup ?? cur.cleanup,
+    };
+    await writeSettings({ ...settings, voice: next });
+    return voiceToView(next);
+  }
+);
+
+const voiceAborters = new Map<string, AbortController>();
+
+ipcMain.handle(
+  'voice:transcribe',
+  async (
+    e,
+    id: string,
+    payload:
+      | { kind: 'cloud'; audio: ArrayBuffer; mimeType: string }
+      | { kind: 'local'; pcm: Float32Array }
+  ): Promise<{ ok: true; text: string } | { ok: false; error: string }> => {
+    const v = await readVoiceSettings();
+    const abort = new AbortController();
+    voiceAborters.set(id, abort);
+    const sender = e.sender;
+    const progress = (msg: string) => {
+      if (!sender.isDestroyed()) sender.send(`voice:progress:${id}`, msg);
+    };
+    try {
+      let text = '';
+      if (payload.kind === 'cloud') {
+        text = await transcribeCloud({
+          baseUrl: v.cloud.baseUrl,
+          apiKey: decryptKey(v.cloud.encKey),
+          model: v.cloud.model,
+          language: v.language || undefined,
+          prompt: v.vocab || undefined,
+          audio: new Uint8Array(payload.audio),
+          mimeType: payload.mimeType,
+          signal: abort.signal,
+        });
+      } else {
+        text = await transcribeLocal({
+          model: v.local.model,
+          language: v.language || undefined,
+          pcm: payload.pcm,
+          onProgress: progress,
+        });
+      }
+      return { ok: true, text };
+    } catch (err) {
+      if (abort.signal.aborted) return { ok: true, text: '' };
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn('[voice] error:', msg);
+      return { ok: false, error: msg };
+    } finally {
+      voiceAborters.delete(id);
+    }
+  }
+);
+
+ipcMain.handle('voice:cancel', async (_e, id: string): Promise<boolean> => {
+  const a = voiceAborters.get(id);
+  if (a) {
+    a.abort();
+    voiceAborters.delete(id);
     return true;
   }
   return false;

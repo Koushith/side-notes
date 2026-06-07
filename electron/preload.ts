@@ -41,6 +41,26 @@ export interface AISettingsUpdate {
   };
 }
 
+export type VoiceEngine = 'cloud' | 'local';
+
+export interface VoiceSettingsView {
+  engine: VoiceEngine;
+  cloud: { baseUrl: string; model: string; hasKey: boolean };
+  local: { model: string };
+  language: string;
+  vocab: string;
+  cleanup: boolean;
+}
+
+export interface VoiceSettingsUpdate {
+  engine?: VoiceEngine;
+  cloud?: { baseUrl?: string; model?: string; apiKey?: string | null };
+  local?: { model?: string };
+  language?: string;
+  vocab?: string;
+  cleanup?: boolean;
+}
+
 const api = {
   vault: {
     pick: () => ipcRenderer.invoke('vault:pick') as Promise<string | null>,
@@ -129,6 +149,28 @@ const api = {
     },
     onError: (id: string, handler: (msg: string) => void) => {
       const channel = `ai:error:${id}`;
+      const listener = (_: unknown, msg: string) => handler(msg);
+      ipcRenderer.on(channel, listener);
+      return () => ipcRenderer.removeListener(channel, listener);
+    },
+  },
+  voice: {
+    getSettings: () => ipcRenderer.invoke('voice:settings:get') as Promise<VoiceSettingsView>,
+    setSettings: (update: VoiceSettingsUpdate) =>
+      ipcRenderer.invoke('voice:settings:set', update) as Promise<VoiceSettingsView>,
+    requestMic: () => ipcRenderer.invoke('voice:requestMic') as Promise<boolean>,
+    transcribe: (
+      id: string,
+      payload:
+        | { kind: 'cloud'; audio: ArrayBuffer; mimeType: string }
+        | { kind: 'local'; pcm: Float32Array }
+    ) =>
+      ipcRenderer.invoke('voice:transcribe', id, payload) as Promise<
+        { ok: true; text: string } | { ok: false; error: string }
+      >,
+    cancel: (id: string) => ipcRenderer.invoke('voice:cancel', id) as Promise<boolean>,
+    onProgress: (id: string, handler: (msg: string) => void) => {
+      const channel = `voice:progress:${id}`;
       const listener = (_: unknown, msg: string) => handler(msg);
       ipcRenderer.on(channel, listener);
       return () => ipcRenderer.removeListener(channel, listener);

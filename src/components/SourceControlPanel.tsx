@@ -10,6 +10,7 @@ import {
   RotateCcw,
   FileText,
   AlertCircle,
+  Check,
 } from 'lucide-react';
 import { useGit } from '@/stores/git';
 import { useVault } from '@/stores/vault';
@@ -87,24 +88,36 @@ export function SourceControlPanel() {
 
   const onCommit = async () => {
     if (!message.trim()) return;
+    // Friendly model: if the user hasn't staged anything but has changes, stage
+    // them all and commit — no one should have to learn "staging" to save a note.
     if (!staged.length) {
-      toast.error('Nothing staged to commit.');
-      return;
+      if (!working.length) {
+        toast.error('Nothing to commit.');
+        return;
+      }
+      await stage(working.map((f) => f.path));
     }
     const ok = await commit(message);
     if (ok) {
       setMessage('');
-      toast.success('Committed.');
+      toast.success(hasRemote ? 'Committed. Push to send it to GitHub.' : 'Committed.');
     }
   };
 
+  // What the commit button does, given current state.
+  const commitCount = staged.length || working.length;
+  const commitLabel = staged.length ? 'Commit' : 'Commit all';
+  const canCommit = !busy && !!message.trim() && commitCount > 0;
+  const hasChanges = staged.length > 0 || working.length > 0;
+  const synced = hasRemote && ahead === 0 && behind === 0;
+
   const onPush = async () => {
     if (!hasRemote) {
-      toast.error('No remote configured. Add one with `git remote add origin …` in your vault.');
+      toast.error('No remote configured — add one in Terminal first.');
       return;
     }
     const ok = await push();
-    if (ok) toast.success('Pushed.');
+    if (ok) toast.success('Pushed to GitHub.');
     else toast.error(useGit.getState().lastError ?? 'Push failed.');
   };
 
@@ -114,7 +127,7 @@ export function SourceControlPanel() {
       return;
     }
     const ok = await pull();
-    if (ok) toast.success('Pulled.');
+    if (ok) toast.success('Up to date.');
     else toast.error(useGit.getState().lastError ?? 'Pull failed.');
   };
 
@@ -160,26 +173,19 @@ export function SourceControlPanel() {
 
   return (
     <div className="h-full flex flex-col bg-bg">
-      {/* Header */}
+      {/* Header: branch + honest sync state */}
       <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-border-subtle">
-        <div className="flex items-center gap-2.5 min-w-0">
+        <div className="flex items-center gap-2 min-w-0">
           <GitBranch size={15} className="text-text-muted shrink-0" />
           <span className="font-mono text-[12.5px] text-text truncate">{branch ?? '—'}</span>
           {tracking && (
-            <span className="font-mono text-[11px] text-text-subtle truncate">→ {tracking}</span>
+            <span className="font-mono text-[11px] text-text-subtle truncate hidden sm:inline">
+              → {tracking}
+            </span>
           )}
-          {(ahead > 0 || behind > 0) && (
-            <span className="flex items-center gap-2 ml-1 text-[11px] text-text-muted">
-              {behind > 0 && (
-                <span className="inline-flex items-center gap-0.5">
-                  <ArrowDown size={11} /> {behind}
-                </span>
-              )}
-              {ahead > 0 && (
-                <span className="inline-flex items-center gap-0.5">
-                  <ArrowUp size={11} /> {ahead}
-                </span>
-              )}
+          {synced && (
+            <span className="inline-flex items-center gap-1 text-[11px] text-emerald-500 ml-1 shrink-0">
+              <Check size={11} /> Up to date
             </span>
           )}
         </div>
@@ -193,50 +199,78 @@ export function SourceControlPanel() {
         </button>
       </div>
 
-      {/* Commit box + actions */}
-      <div className="px-5 pt-4 pb-3 border-b border-border-subtle space-y-2.5">
-        <textarea
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          onKeyDown={(e) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-              e.preventDefault();
-              onCommit();
-            }
-          }}
-          placeholder="Commit message (⌘↵ to commit)"
-          rows={2}
-          className="w-full px-2.5 py-2 bg-bg-elevated border border-border rounded-md text-[12.5px] text-text placeholder:text-text-subtle resize-none focus:outline-none focus:border-accent/40"
-        />
-        <div className="flex items-center gap-2">
+      {/* Commit box — only when there's something to commit. */}
+      {hasChanges && (
+        <div className="px-5 pt-4 pb-3 border-b border-border-subtle space-y-2.5">
+          <textarea
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyDown={(e) => {
+              if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                e.preventDefault();
+                onCommit();
+              }
+            }}
+            placeholder="Message — what changed? (Cmd+Enter to commit)"
+            rows={2}
+            className="w-full px-2.5 py-2 bg-bg-elevated border border-border rounded-md text-[12.5px] text-text placeholder:text-text-subtle resize-none focus:outline-none focus:border-accent/40"
+          />
           <button
             onClick={onCommit}
-            disabled={busy || !message.trim() || !staged.length}
-            className="flex-1 px-3 py-1.5 bg-accent text-bg rounded-md text-[12px] font-medium hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors inline-flex items-center justify-center gap-1.5"
+            disabled={!canCommit}
+            className="w-full px-3 py-2 bg-accent text-bg rounded-md text-[12.5px] font-medium hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors inline-flex items-center justify-center gap-1.5"
           >
-            <GitCommit size={12} /> Commit
-          </button>
-          <button
-            onClick={onPull}
-            disabled={busy || !hasRemote}
-            className="px-3 py-1.5 border border-border rounded-md text-[12px] text-text-muted hover:bg-bg-hover hover:text-text disabled:opacity-40 disabled:cursor-not-allowed transition-colors inline-flex items-center gap-1.5"
-            title={behind > 0 ? `${behind} incoming` : 'Pull'}
-          >
-            <ArrowDown size={12} /> Pull
-          </button>
-          <button
-            onClick={onPush}
-            disabled={busy || !hasRemote}
-            className="px-3 py-1.5 border border-border rounded-md text-[12px] text-text-muted hover:bg-bg-hover hover:text-text disabled:opacity-40 disabled:cursor-not-allowed transition-colors inline-flex items-center gap-1.5"
-            title={ahead > 0 ? `${ahead} outgoing` : 'Push'}
-          >
-            <ArrowUp size={12} /> Push
+            <GitCommit size={13} /> {commitLabel} {commitCount} change{commitCount === 1 ? '' : 's'}
           </button>
         </div>
-        {!hasRemote && hasRepo && (
-          <p className="text-[11px] text-text-subtle">
-            No remote — add one in your terminal to enable push/pull.
-          </p>
+      )}
+
+      {/* Sync — adaptive: surfaces the next action (push / pull) prominently. */}
+      <div className="px-5 pt-3 pb-3 border-b border-border-subtle space-y-2">
+        {!hasRemote ? (
+          hasRepo && (
+            <p className="text-[11.5px] text-text-subtle leading-snug">
+              No remote yet. Add one in Terminal (<code>git remote add origin …</code>) to push your
+              notes to GitHub.
+            </p>
+          )
+        ) : (
+          <>
+            {ahead > 0 && (
+              <button
+                onClick={onPush}
+                disabled={busy}
+                className="w-full px-3 py-2 bg-accent text-bg rounded-md text-[12.5px] font-medium hover:bg-accent-hover disabled:opacity-50 transition-colors inline-flex items-center justify-center gap-1.5"
+                title={`Push to ${tracking ?? 'remote'}`}
+              >
+                <ArrowUp size={13} /> Push {ahead} commit{ahead === 1 ? '' : 's'} to GitHub
+              </button>
+            )}
+            {behind > 0 && (
+              <button
+                onClick={onPull}
+                disabled={busy}
+                className={cn(
+                  'w-full px-3 py-2 rounded-md text-[12.5px] font-medium transition-colors inline-flex items-center justify-center gap-1.5 disabled:opacity-50',
+                  ahead > 0
+                    ? 'border border-border text-text-muted hover:bg-bg-hover hover:text-text'
+                    : 'bg-accent text-bg hover:bg-accent-hover'
+                )}
+              >
+                <ArrowDown size={13} /> Pull {behind} change{behind === 1 ? '' : 's'}
+              </button>
+            )}
+            {synced && (
+              <button
+                onClick={onPull}
+                disabled={busy}
+                className="w-full px-3 py-1.5 border border-border rounded-md text-[12px] text-text-muted hover:bg-bg-hover hover:text-text disabled:opacity-50 transition-colors inline-flex items-center justify-center gap-1.5"
+                title="Check the remote for new changes"
+              >
+                <ArrowDown size={12} /> Check for updates
+              </button>
+            )}
+          </>
         )}
         {lastError && (
           <p className="text-[11.5px] text-red-500 flex items-start gap-1.5">
@@ -249,8 +283,14 @@ export function SourceControlPanel() {
       {/* File lists */}
       <div className="flex-1 overflow-y-auto px-2 py-2">
         {staged.length === 0 && working.length === 0 && (
-          <div className="h-full flex items-center justify-center text-[12.5px] text-text-subtle">
-            Working tree clean.
+          <div className="h-full flex flex-col items-center justify-center gap-1.5 text-center px-6">
+            <GitCommit size={20} className="text-text-subtle" />
+            <p className="text-[12.5px] text-text-muted">No changes</p>
+            <p className="text-[11.5px] text-text-subtle leading-snug">
+              {ahead > 0 && hasRemote
+                ? `${ahead} commit${ahead > 1 ? 's' : ''} ready to push.`
+                : 'Everything is committed. Edit a note and changes show up here.'}
+            </p>
           </div>
         )}
 
@@ -361,14 +401,13 @@ function FileRow({
   const color = statusColor(letter);
   const dir = file.path.includes('/') ? file.path.slice(0, file.path.lastIndexOf('/')) : '';
   const base = file.path.split('/').pop() ?? file.path;
-  const isMd = /\.(md|markdown|mdx)$/i.test(base);
 
   return (
     <div className="group flex items-center gap-2 px-2 py-1 rounded-md hover:bg-bg-hover">
       <button
-        onClick={() => isMd && openFile(file.path)}
+        onClick={() => openFile(file.path)}
         className="flex items-center gap-2 flex-1 min-w-0 text-left"
-        title={file.path}
+        title={`Open ${file.path}`}
       >
         <FileText size={12} className="text-text-subtle shrink-0" />
         <span className="text-[12.5px] text-text truncate">{base}</span>

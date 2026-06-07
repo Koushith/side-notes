@@ -7,6 +7,8 @@ interface UiState {
   rawMode: boolean;
   setRawMode: (v: boolean) => void;
   toggleRawMode: () => void;
+  aiSettingsOpen: boolean;
+  setAiSettingsOpen: (v: boolean) => void;
 }
 
 const FOCUS_KEY = 'second-brain.focusMode';
@@ -49,4 +51,6 @@ export const useUi = create<UiState>((set, get) => ({
     persistBool(RAW_KEY, next);
     set({ rawMode: next });
   },
+  aiSettingsOpen: false,
+  setAiSettingsOpen: (aiSettingsOpen) => set({ aiSettingsOpen }),
 }));

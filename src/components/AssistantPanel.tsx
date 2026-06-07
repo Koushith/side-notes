@@ -12,7 +12,8 @@ import {
 } from 'lucide-react';
 import { useAI, ACTION_LABELS, type ActionKind } from '@/stores/ai';
 import { useEditorRef } from '@/stores/editorRef';
-import { AISettings } from './AISettings';
+import { useUi } from '@/stores/ui';
+import { cn } from '@/lib/utils';
 import { toast } from './Toast';
 import type { Editor } from '@tiptap/core';
 
@@ -66,7 +67,7 @@ export function AssistantPanel() {
   const cancel = useAI((s) => s.cancel);
   const clearOutput = useAI((s) => s.clearOutput);
 
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const setAiSettingsOpen = useUi((s) => s.setAiSettingsOpen);
 
   // Re-render when selection changes so the "Selection · 142 chars" indicator updates.
   const [, force] = useState(0);
@@ -110,7 +111,7 @@ export function AssistantPanel() {
 
   const onAction = (kind: ActionKind) => {
     if (!configReady) {
-      setSettingsOpen(true);
+      setAiSettingsOpen(true);
       return;
     }
     const sel = getSelection(editor);
@@ -170,74 +171,107 @@ export function AssistantPanel() {
 
   return (
     <>
-      <div className="px-4 pt-4 pb-3 border-b border-border-subtle flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="font-serif text-[14px] font-semibold text-text flex items-center gap-1.5">
-            <Bot size={13} className="text-text-muted" /> Assistant
-          </div>
-          <div className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-text-muted mt-0.5 truncate">
-            {providerLabel}
-          </div>
+      <div className="px-4 pt-4 pb-3 border-b border-border-subtle flex items-center justify-between gap-2">
+        <div className="font-serif text-[14px] font-semibold text-text flex items-center gap-1.5">
+          <Bot size={13} className="text-text-muted" /> Assistant
         </div>
         <button
-          onClick={() => setSettingsOpen(true)}
+          onClick={() => setAiSettingsOpen(true)}
           title="AI settings"
-          className="mt-0.5 p-1 rounded-md text-text-muted hover:text-text hover:bg-bg-hover transition-colors shrink-0"
+          className="p-1 rounded-md text-text-muted hover:text-text hover:bg-bg-hover transition-colors shrink-0"
         >
           <Settings size={14} />
         </button>
       </div>
 
-      <div className="px-4 py-3 border-b border-border-subtle">
-        <div className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-text-subtle">
-          Target
-        </div>
-        <div className="mt-1 text-[12.5px] text-text-muted">
-          {sourceLabel} · {sourceLength.toLocaleString()} chars
-          {!hasSelection && (
-            <div className="mt-1 text-[11.5px] text-text-subtle italic">
-              Highlight text in the editor to target just that selection.
-            </div>
+      {/* Status: a glanceable "is this working + what model" row. */}
+      <button
+        onClick={() => setAiSettingsOpen(true)}
+        className="w-full px-4 py-2.5 border-b border-border-subtle flex items-center gap-2 text-left hover:bg-bg-hover transition-colors"
+        title="Open AI settings"
+      >
+        <span
+          className={cn(
+            'h-2 w-2 rounded-full shrink-0',
+            configReady ? 'bg-emerald-500' : 'bg-amber-500'
           )}
-        </div>
-      </div>
+        />
+        <span className="text-[12px] text-text-muted truncate flex-1">
+          {configReady ? providerLabel : settings ? 'Not set up' : 'Loading…'}
+        </span>
+        <Settings size={12} className="text-text-subtle shrink-0" />
+      </button>
 
-      <div className="px-3 py-3 border-b border-border-subtle">
-        <div className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-text-subtle px-1 mb-1.5">
-          Actions
-        </div>
-        <div className="flex flex-col gap-1">
-          {ACTION_ORDER.map((kind) => {
-            const isCurrent = busy && currentAction === kind;
-            return (
-              <button
-                key={kind}
-                onClick={() => onAction(kind)}
-                disabled={busy}
-                className="group flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-left text-[12.5px] text-text-muted hover:bg-bg-hover hover:text-text disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                <span className="text-text-subtle group-hover:text-text-muted">
-                  {ACTION_ICONS[kind]}
-                </span>
-                <span className="flex-1">{ACTION_LABELS[kind]}</span>
-                {isCurrent && (
-                  <span className="text-[10.5px] font-mono text-accent-ink uppercase tracking-wider">
-                    streaming…
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-        {!configReady && settings && (
+      {!configReady && settings ? (
+        // Unconfigured: one clear call to action instead of dead, disabled buttons.
+        <div className="px-4 py-6 flex flex-col items-center text-center gap-3">
+          <Bot size={22} className="text-text-subtle" />
+          <div>
+            <p className="text-[13px] text-text font-medium">Set up an AI model</p>
+            <p className="mt-1 text-[12px] text-text-muted leading-snug">
+              Connect a local (Ollama) or cloud model to rewrite, fix grammar, and summarize your
+              notes.
+            </p>
+          </div>
           <button
-            onClick={() => setSettingsOpen(true)}
-            className="mt-2 w-full text-[11.5px] text-text-subtle italic hover:text-text-muted transition-colors text-left px-1"
+            onClick={() => setAiSettingsOpen(true)}
+            className="px-4 py-1.5 bg-accent text-bg rounded-md text-[12.5px] font-medium hover:bg-accent-hover transition-colors"
           >
-            Configure a model to enable actions →
+            Set up AI
           </button>
-        )}
-      </div>
+        </div>
+      ) : (
+        <>
+          <div className="px-4 py-3 border-b border-border-subtle">
+            <div className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-text-subtle">
+              Works on
+            </div>
+            <div className="mt-1 text-[12.5px] text-text flex items-center gap-1.5">
+              <span
+                className={cn(
+                  'inline-block h-1.5 w-1.5 rounded-full',
+                  hasSelection ? 'bg-accent' : 'bg-text-subtle'
+                )}
+              />
+              {sourceLabel} · {sourceLength.toLocaleString()} chars
+            </div>
+            {!hasSelection && (
+              <div className="mt-1 text-[11.5px] text-text-subtle italic">
+                Tip: highlight text first to target just that selection.
+              </div>
+            )}
+          </div>
+
+          <div className="px-3 py-3 border-b border-border-subtle">
+            <div className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-text-subtle px-1 mb-1.5">
+              Actions
+            </div>
+            <div className="flex flex-col gap-1">
+              {ACTION_ORDER.map((kind) => {
+                const isCurrent = busy && currentAction === kind;
+                return (
+                  <button
+                    key={kind}
+                    onClick={() => onAction(kind)}
+                    disabled={busy}
+                    className="group flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-left text-[12.5px] text-text-muted hover:bg-bg-hover hover:text-text disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <span className="text-text-subtle group-hover:text-text-muted">
+                      {ACTION_ICONS[kind]}
+                    </span>
+                    <span className="flex-1">{ACTION_LABELS[kind]}</span>
+                    {isCurrent && (
+                      <span className="text-[10.5px] font-mono text-text-muted uppercase tracking-wider">
+                        running…
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      )}
 
       {(output || busy || lastError) && (
         <div className="px-4 py-3 border-b border-border-subtle">
@@ -296,7 +330,6 @@ export function AssistantPanel() {
         </div>
       )}
 
-      <AISettings open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </>
   );
 }
