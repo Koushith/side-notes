@@ -6,6 +6,7 @@ import { V030Live, totalFramesLive } from './V030Live';
 import { V030Cinematic, totalFramesCinematic } from './V030Cinematic';
 import { DribbbleShot } from './shots/template';
 import { SHOTS } from './shots/registry';
+import { MockDribbbleShot, MOCK_SHOTS } from './shots/mockShots';
 
 const FPS = 30;
 
@@ -80,6 +81,24 @@ export const RemotionRoot: React.FC = () => {
           height={SHOT_HEIGHT}
           defaultProps={{
             src: s.src,
+            eyebrow: s.eyebrow,
+            title: s.title,
+            subtitle: s.subtitle,
+            tone: s.tone,
+          }}
+        />
+      ))}
+      {MOCK_SHOTS.map((s) => (
+        <Composition
+          key={s.id}
+          id={s.id}
+          component={MockDribbbleShot}
+          durationInFrames={1}
+          fps={FPS}
+          width={SHOT_WIDTH}
+          height={SHOT_HEIGHT}
+          defaultProps={{
+            kind: s.kind,
             eyebrow: s.eyebrow,
             title: s.title,
             subtitle: s.subtitle,
