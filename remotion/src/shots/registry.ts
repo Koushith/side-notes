@@ -131,4 +131,28 @@ export const SHOTS: ShotConfig[] = [
     subtitle: 'Same header chrome for project lists — no date, just priorities.',
     tone: 'tag',
   },
+  {
+    id: 'shot-assistant',
+    src: 'shots/raw/16-assistant.png',
+    eyebrow: 'AI assistant',
+    title: 'Your own AI, on your notes.',
+    subtitle: 'Improve, fix, summarize. Runs local with Ollama or any cloud model you bring.',
+    tone: 'accent',
+  },
+  {
+    id: 'shot-excalidraw',
+    src: 'shots/raw/17-excalidraw.png',
+    eyebrow: 'Drawings',
+    title: 'Sketch ideas in your vault.',
+    subtitle: 'Excalidraw, built in. Saves as a plain .excalidraw file, fully offline.',
+    tone: 'link',
+  },
+  {
+    id: 'shot-whatsnew',
+    src: 'shots/raw/15-whatsnew.png',
+    eyebrow: 'Release notes',
+    title: 'Every update, in plain English.',
+    subtitle: "What's new, what got fixed, what got cut. Version by version.",
+    tone: 'tag',
+  },
 ];
