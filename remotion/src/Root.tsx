@@ -1,4 +1,5 @@
 import { Composition } from 'remotion';
+import { V040, totalFramesV040 } from './V040';
 import { V030, V030Vertical, totalFrames } from './V030';
 import { V030Live, totalFramesLive } from './V030Live';
 import { V030Cinematic, totalFramesCinematic } from './V030Cinematic';
@@ -15,8 +16,17 @@ export const RemotionRoot: React.FC = () => {
   const total = totalFrames();
   const totalLive = totalFramesLive();
   const totalCinematic = totalFramesCinematic();
+  const totalV040 = totalFramesV040();
   return (
     <>
+      <Composition
+        id="V040"
+        component={V040}
+        durationInFrames={totalV040}
+        fps={FPS}
+        width={1920}
+        height={1080}
+      />
       <Composition
         id="V030"
         component={V030}
