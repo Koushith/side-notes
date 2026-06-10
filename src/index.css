@@ -328,6 +328,43 @@
   .ProseMirror pre code .hljs-emphasis { font-style: italic; }
   .ProseMirror pre code .hljs-deletion { color: #c4623a; }
 
+  /* Code blocks now carry their own frame (header + border) via a NodeView, so
+     drop the global pre frame inside it to avoid a double border / extra bg. */
+  .ProseMirror .not-prose pre {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    margin: 0;
+    padding: 12px 14px;
+  }
+
+  /* Dark mode: brighter, higher-contrast tokens so code pops on the dark canvas. */
+  [data-mode="dark"] .ProseMirror pre code .hljs-keyword,
+  [data-mode="dark"] .ProseMirror pre code .hljs-selector-tag,
+  [data-mode="dark"] .ProseMirror pre code .hljs-built_in,
+  [data-mode="dark"] .ProseMirror pre code .hljs-name,
+  [data-mode="dark"] .ProseMirror pre code .hljs-tag { color: #c4b5fd; }
+  [data-mode="dark"] .ProseMirror pre code .hljs-string,
+  [data-mode="dark"] .ProseMirror pre code .hljs-title,
+  [data-mode="dark"] .ProseMirror pre code .hljs-section,
+  [data-mode="dark"] .ProseMirror pre code .hljs-attribute,
+  [data-mode="dark"] .ProseMirror pre code .hljs-literal,
+  [data-mode="dark"] .ProseMirror pre code .hljs-template-tag,
+  [data-mode="dark"] .ProseMirror pre code .hljs-type,
+  [data-mode="dark"] .ProseMirror pre code .hljs-addition { color: #86efac; }
+  [data-mode="dark"] .ProseMirror pre code .hljs-number,
+  [data-mode="dark"] .ProseMirror pre code .hljs-regexp,
+  [data-mode="dark"] .ProseMirror pre code .hljs-symbol,
+  [data-mode="dark"] .ProseMirror pre code .hljs-variable,
+  [data-mode="dark"] .ProseMirror pre code .hljs-template-variable,
+  [data-mode="dark"] .ProseMirror pre code .hljs-link,
+  [data-mode="dark"] .ProseMirror pre code .hljs-selector-attr,
+  [data-mode="dark"] .ProseMirror pre code .hljs-selector-pseudo { color: #fdba74; }
+  [data-mode="dark"] .ProseMirror pre code .hljs-function,
+  [data-mode="dark"] .ProseMirror pre code .hljs-class .hljs-title,
+  [data-mode="dark"] .ProseMirror pre code .hljs-title.function_,
+  [data-mode="dark"] .ProseMirror pre code .hljs-title.class_ { color: #7dd3fc; }
+
   /* React Flow theming */
   .react-flow__pane { background: rgb(var(--c-bg)); }
   .react-flow__node { color: rgb(var(--c-text)); }

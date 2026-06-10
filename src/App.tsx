@@ -28,6 +28,7 @@ import { About } from '@/components/About';
 import { VaultSwitcher } from '@/components/VaultSwitcher';
 import { AISettings } from '@/components/AISettings';
 import { VoiceDictation } from '@/components/VoiceDictation';
+import { Lightbox } from '@/components/Lightbox';
 import { PromptHost } from '@/components/PromptDialog';
 import { ConfirmHost } from '@/components/ConfirmDialog';
 import { ToastHost } from '@/components/Toast';
@@ -240,6 +241,7 @@ export default function App() {
       <VaultSwitcher open={vaultSwitcherOpen} onClose={() => setVaultSwitcherOpen(false)} />
       <AISettings open={aiSettingsOpen} onClose={() => setAiSettingsOpen(false)} />
       <VoiceDictation />
+      <Lightbox />
       <PromptHost />
       <ConfirmHost />
       <ToastHost />

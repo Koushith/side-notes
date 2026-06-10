@@ -15,6 +15,7 @@ import { Markdown } from 'tiptap-markdown';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVault } from '@/stores/vault';
 import { useEditorRef } from '@/stores/editorRef';
+import { useLightbox } from '@/stores/lightbox';
 import { Wikilink, preprocessWikilinks } from './extensions/Wikilink';
 import { Tag, preprocessTags } from './extensions/Tag';
 import { SlashMenu, SlashMenuState, clearSlashRange } from './extensions/SlashMenu';
@@ -166,6 +167,14 @@ export function Editor({ rel, vaultPath }: EditorProps) {
               insertImage(file);
               return true;
             }
+          }
+          return false;
+        },
+        // Double-click an image to open it in the zoomable lightbox.
+        handleDoubleClickOn: (_view, _pos, node) => {
+          if (node.type.name === 'image' && node.attrs.src) {
+            useLightbox.getState().open({ kind: 'image', src: node.attrs.src, title: node.attrs.alt ?? undefined });
+            return true;
           }
           return false;
         },

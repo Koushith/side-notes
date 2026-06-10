@@ -2,8 +2,9 @@ import { NodeViewWrapper, NodeViewContent, ReactNodeViewRenderer, type NodeViewP
 import { useEffect, useRef, useState } from 'react';
 import mermaid from 'mermaid';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
-import { Eye, Code2, AlertCircle } from 'lucide-react';
+import { Eye, Code2, AlertCircle, Maximize2, Copy, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useLightbox } from '@/stores/lightbox';
 
 // Mermaid wants literal color values (hex / rgb()), not CSS var references — its color
 // parser blows up on `rgb(var(--c-bg) / 1)`. We resolve our `--c-*` vars (which hold
@@ -31,7 +32,10 @@ function ensureMermaidInit() {
   mermaid.initialize({
     startOnLoad: false,
     theme: 'base',
-    securityLevel: 'strict',
+    // 'loose' lets HTML labels, links, and a wider range of diagram types render.
+    // The vault is local + trusted, so this is safe and renders far more diagrams.
+    securityLevel: 'loose',
+    flowchart: { htmlLabels: true, curve: 'basis' },
     fontFamily: 'Inter Variable, system-ui, sans-serif',
     themeVariables: {
       background: readThemeColor('--c-bg-elevated', '#ffffff'),
@@ -89,15 +93,10 @@ function MermaidNodeView(props: NodeViewProps) {
     };
   }, [source, view, isMermaid]);
 
-  // Non-mermaid blocks behave like ordinary code blocks — pass through.
+  // Non-mermaid blocks render as a framed code block: a header with the language
+  // label and a copy button, and the lowlight-highlighted source below.
   if (!isMermaid) {
-    return (
-      <NodeViewWrapper as="div" className="code-block">
-        <pre>
-          <NodeViewContent as="code" />
-        </pre>
-      </NodeViewWrapper>
-    );
+    return <CodeBlockView language={language} text={source} />;
   }
 
   return (
@@ -111,6 +110,14 @@ function MermaidNodeView(props: NodeViewProps) {
       >
         <span className="font-mono uppercase tracking-[0.1em] text-text-subtle">mermaid</span>
         <div className="flex items-center gap-0.5">
+          {view === 'preview' && svg && !err && (
+            <ToggleBtn
+              active={false}
+              onClick={() => useLightbox.getState().open({ kind: 'svg', svg, title: 'mermaid' })}
+              icon={<Maximize2 size={11} />}
+              label="Enlarge"
+            />
+          )}
           <ToggleBtn active={view === 'preview'} onClick={() => setView('preview')} icon={<Eye size={11} />} label="Preview" />
           <ToggleBtn active={view === 'source'} onClick={() => setView('source')} icon={<Code2 size={11} />} label="Source" />
         </div>
@@ -132,7 +139,12 @@ function MermaidNodeView(props: NodeViewProps) {
               <pre className="whitespace-pre-wrap font-mono text-[11.5px]">{err}</pre>
             </div>
           ) : svg ? (
-            <div className="max-w-full overflow-x-auto" dangerouslySetInnerHTML={{ __html: svg }} />
+            <div
+              className="max-w-full overflow-x-auto cursor-zoom-in"
+              title="Click to enlarge"
+              onClick={() => useLightbox.getState().open({ kind: 'svg', svg, title: 'mermaid' })}
+              dangerouslySetInnerHTML={{ __html: svg }}
+            />
           ) : (
             <div className="text-[12px] text-text-subtle italic">
               {source.trim() ? 'Rendering…' : 'Empty diagram — switch to Source and start typing.'}
@@ -173,6 +185,44 @@ function ToggleBtn({
       {icon}
       {label}
     </button>
+  );
+}
+
+// A framed code block: header with the language + a copy button, and the
+// lowlight-highlighted source (NodeViewContent keeps ProseMirror in control of
+// editing + decorations).
+function CodeBlockView({ language, text }: { language: string; text: string }) {
+  const [copied, setCopied] = useState(false);
+  const label = language && language !== 'null' ? language : 'code';
+  const onCopy = () => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1400);
+    });
+  };
+  return (
+    <NodeViewWrapper as="div" className="my-4 rounded-lg border border-border bg-bg-elevated overflow-hidden not-prose">
+      <div
+        className="flex items-center justify-between px-3 py-1.5 border-b border-border-subtle bg-bg text-[11px]"
+        contentEditable={false}
+      >
+        <span className="font-mono uppercase tracking-[0.1em] text-text-subtle">{label}</span>
+        <button
+          type="button"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            onCopy();
+          }}
+          className="inline-flex items-center gap-1 px-1.5 py-[3px] rounded text-[10.5px] text-text-subtle hover:text-text transition-colors"
+        >
+          {copied ? <Check size={11} /> : <Copy size={11} />}
+          {copied ? 'Copied' : 'Copy'}
+        </button>
+      </div>
+      <pre className="hljs m-0 p-3 text-[12.5px] leading-[1.55] font-mono overflow-x-auto bg-transparent">
+        <NodeViewContent as="code" className={language ? `language-${language}` : undefined} />
+      </pre>
+    </NodeViewWrapper>
   );
 }
 
