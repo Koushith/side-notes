@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ChevronRight,
+  ChevronsDownUp,
   FileText,
   Folder,
   FolderOpen,
@@ -50,6 +51,8 @@ export function FileTree() {
   const [creating, setCreating] = useState<CreatingState | null>(null);
   const [creatingValue, setCreatingValue] = useState('');
   const [rootDragOver, setRootDragOver] = useState(false);
+  const [collapseEpoch, setCollapseEpoch] = useState(0);
+  const collapseAll = () => setCollapseEpoch((n) => n + 1);
 
   // Filter mode: when search, tag, or pinnedOnly is active, render flat list
   if (search || selectedTag || pinnedOnly) {
@@ -150,6 +153,8 @@ export function FileTree() {
           creatingValue={creatingValue}
           setCreating={setCreating}
           setCreatingValue={setCreatingValue}
+          collapseEpoch={collapseEpoch}
+          onCollapseAll={collapseAll}
         />
       ))}
     </div>
@@ -163,6 +168,9 @@ interface NodeDispatchProps {
   creatingValue: string;
   setCreating: (v: CreatingState | null) => void;
   setCreatingValue: (v: string) => void;
+  // Bumped to collapse every folder at once. Folders watch it and close.
+  collapseEpoch: number;
+  onCollapseAll: () => void;
 }
 
 function NodeDispatcher(props: NodeDispatchProps) {
@@ -179,6 +187,8 @@ function FolderNode({
   creatingValue,
   setCreating,
   setCreatingValue,
+  collapseEpoch,
+  onCollapseAll,
 }: NodeDispatchProps) {
   const [open, setOpen] = useState(node.defaultOpen ?? true);
   const [dragOver, setDragOver] = useState(false);
@@ -188,7 +198,14 @@ function FolderNode({
   const createExcalidraw = useVault((s) => s.createExcalidraw);
   const createFolder = useVault((s) => s.createFolder);
   const deleteFolder = useVault((s) => s.deleteFolder);
+  const renameFolder = useVault((s) => s.renameFolder);
   const vaultPath = useVault((s) => s.vaultPath);
+
+  // Collapse-all: when the epoch bumps, every folder closes. Guard on > 0 so the
+  // initial mount keeps each folder's defaultOpen.
+  useEffect(() => {
+    if (collapseEpoch > 0) setOpen(false);
+  }, [collapseEpoch]);
   // Virtual folders (e.g. Year/Month buckets inside Daily Notes) only exist in the UI —
   // no disk path to rename, no drop target, no context menu actions.
   const isVirtual = node.virtual === true;
@@ -229,6 +246,30 @@ function FolderNode({
     {
       label: 'Folder',
       items: [
+        {
+          label: 'Rename',
+          icon: <Pencil size={13} />,
+          onClick: async () => {
+            const next = await promptUser({
+              title: 'Rename folder',
+              message: node.rel,
+              defaultValue: node.name,
+              okLabel: 'Rename',
+            });
+            if (next && next.trim() && next.trim() !== node.name) {
+              try {
+                await renameFolder(node.rel, next.trim());
+              } catch (err) {
+                toast.error(`Rename failed: ${(err as Error).message}`);
+              }
+            }
+          },
+        },
+        {
+          label: 'Collapse all',
+          icon: <ChevronsDownUp size={13} />,
+          onClick: onCollapseAll,
+        },
         {
           label: 'Reveal in Finder',
           icon: <ExternalLink size={13} />,
@@ -386,6 +427,8 @@ function FolderNode({
               creatingValue={creatingValue}
               setCreating={setCreating}
               setCreatingValue={setCreatingValue}
+              collapseEpoch={collapseEpoch}
+              onCollapseAll={onCollapseAll}
             />
           ))}
           {(!node.children || node.children.length === 0) && (

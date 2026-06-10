@@ -31,6 +31,7 @@ interface VaultState {
   createCanvas: (relPath: string) => Promise<string>;
   createExcalidraw: (relPath: string) => Promise<string>;
   renameFile: (rel: string, newRel: string) => Promise<void>;
+  renameFolder: (rel: string, newName: string) => Promise<void>;
   deleteFile: (rel: string) => Promise<void>;
   createFolder: (relPath: string) => Promise<void>;
   deleteFolder: (relPath: string) => Promise<void>;
@@ -469,6 +470,39 @@ export const useVault = create<VaultState>((set, get) => ({
       return {
         activeFile: s.activeFile === rel ? newRel : s.activeFile,
         tabs: s.tabs.map((t) => (t === rel ? newRel : t)),
+        pinned,
+      };
+    });
+  },
+
+  async renameFolder(rel, newName) {
+    const vp = get().vaultPath;
+    if (!vp) return;
+    const trimmed = newName.replace(/^[\\/]+|[\\/]+$/g, '').trim();
+    if (!trimmed || trimmed.includes('/')) {
+      throw new Error('Enter a valid folder name (no slashes).');
+    }
+    const slash = rel.lastIndexOf('/');
+    const parent = slash >= 0 ? rel.slice(0, slash) : '';
+    const newRel = parent ? `${parent}/${trimmed}` : trimmed;
+    if (newRel === rel) return;
+    if (get().folders.has(newRel) || get().files.has(newRel)) {
+      throw new Error(`"${trimmed}" already exists here.`);
+    }
+    await api.files.rename(joinPath(vp, rel), joinPath(vp, newRel));
+    // reloadIndex rebuilds files + folders from disk; we only remap the UI-only
+    // state (open tabs, active file, pins) that points inside the renamed folder.
+    await get().reloadIndex();
+    const prefix = rel + '/';
+    const remap = (p: string) =>
+      p === rel ? newRel : p.startsWith(prefix) ? newRel + '/' + p.slice(prefix.length) : p;
+    set((s) => {
+      const pinned = new Set<string>();
+      for (const p of s.pinned) pinned.add(remap(p));
+      persistPinned(s.vaultPath, pinned);
+      return {
+        activeFile: s.activeFile ? remap(s.activeFile) : s.activeFile,
+        tabs: s.tabs.map(remap),
         pinned,
       };
     });
