@@ -16,6 +16,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVault } from '@/stores/vault';
 import { useEditorRef } from '@/stores/editorRef';
 import { useLightbox } from '@/stores/lightbox';
+import { markdownToDoc } from '@/lib/markdownLoader';
 import { Wikilink, preprocessWikilinks } from './extensions/Wikilink';
 import { Tag, preprocessTags } from './extensions/Tag';
 import { SlashMenu, SlashMenuState, clearSlashRange } from './extensions/SlashMenu';
@@ -246,7 +247,15 @@ export function Editor({ rel, vaultPath }: EditorProps) {
         const withTags = preprocessTags(withWikis);
         lastSavedRel.current = rel;
         lastSavedRaw.current = raw;
-        editor.commands.setContent(withTags, false, { preserveWhitespace: 'full' });
+        // Convert markdown -> ProseMirror doc ourselves, bypassing tiptap-markdown's
+        // buggy code-block round-trip (see markdownToDoc). Fall back to the built-in
+        // path only if our markdown-it handle is somehow unavailable.
+        const doc = markdownToDoc(editor, withTags);
+        if (doc) {
+          editor.commands.setContent(doc, false, { preserveWhitespace: 'full' });
+        } else {
+          editor.commands.setContent(withTags, false, { preserveWhitespace: 'full' });
+        }
         setTimeout(() => editor.commands.focus('end', { scrollIntoView: false }), 50);
       } catch (err) {
         const msg = (err as Error).message ?? '';
@@ -313,7 +322,12 @@ export function Editor({ rel, vaultPath }: EditorProps) {
         const withWikis = preprocessWikilinks(withImagePaths);
         const withTags = preprocessTags(withWikis);
         lastSavedRaw.current = fresh;
-        editor.commands.setContent(withTags, false, { preserveWhitespace: 'full' });
+        const doc = markdownToDoc(editor, withTags);
+        if (doc) {
+          editor.commands.setContent(doc, false, { preserveWhitespace: 'full' });
+        } else {
+          editor.commands.setContent(withTags, false, { preserveWhitespace: 'full' });
+        }
       } catch (err) {
         console.warn('External-change reload failed', err);
       }
