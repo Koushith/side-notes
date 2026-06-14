@@ -698,6 +698,21 @@ ipcMain.handle('git:pull', async (_e, vaultPath: string): Promise<GitVoid> => {
   }
 });
 
+// Fetch updates the remote-tracking refs (no merge), so a following git:status
+// reports an accurate behind/ahead count. Without this, "behind" stays stale until
+// something else fetched. No-op (ok:true) when there's no remote.
+ipcMain.handle('git:fetch', async (_e, vaultPath: string): Promise<GitVoid> => {
+  try {
+    const git = gitFor(vaultPath);
+    const remotes = await git.getRemotes(false);
+    if (!remotes.length) return { ok: true };
+    await git.fetch();
+    return { ok: true };
+  } catch (e) {
+    return gitErr(e);
+  }
+});
+
 // ---- IPC: AI ----
 // All AI calls run in the main process so API keys never enter the renderer
 // (and so we sidestep the prod CSP `connect-src 'self'`). Streaming is done by

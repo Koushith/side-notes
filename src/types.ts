@@ -130,6 +130,7 @@ export interface ApiBridge {
     commit: (vaultPath: string, message: string) => Promise<GitResult<{ commit: string }>>;
     push: (vaultPath: string) => Promise<GitVoid>;
     pull: (vaultPath: string) => Promise<GitVoid>;
+    fetch: (vaultPath: string) => Promise<GitVoid>;
   };
   ai: {
     getSettings: () => Promise<AISettingsView>;

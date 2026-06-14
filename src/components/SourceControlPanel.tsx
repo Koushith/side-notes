@@ -60,6 +60,8 @@ export function SourceControlPanel() {
   const lastError = useGit((s) => s.lastError);
   const loaded = useGit((s) => s.loaded);
   const refresh = useGit((s) => s.refresh);
+  const fetchRemote = useGit((s) => s.fetchRemote);
+  const checking = useGit((s) => s.checking);
   const initRepo = useGit((s) => s.initRepo);
   const stage = useGit((s) => s.stage);
   const unstage = useGit((s) => s.unstage);
@@ -127,8 +129,18 @@ export function SourceControlPanel() {
       return;
     }
     const ok = await pull();
-    if (ok) toast.success('Up to date.');
+    if (ok) toast.success(behind > 0 ? `Pulled ${behind} change${behind === 1 ? '' : 's'}.` : 'Already up to date.');
     else toast.error(useGit.getState().lastError ?? 'Pull failed.');
+  };
+
+  const onCheckForUpdates = async () => {
+    if (!hasRemote) return;
+    const before = useGit.getState().behind;
+    await fetchRemote();
+    const after = useGit.getState().behind;
+    if (useGit.getState().lastError) return;
+    if (after > before) toast.success(`${after - before} new change${after - before === 1 ? '' : 's'} on GitHub. Pull to bring them in.`);
+    else toast.success('Up to date with GitHub.');
   };
 
   const onDiscard = async (f: GitFileEntry) => {
@@ -171,29 +183,24 @@ export function SourceControlPanel() {
     );
   }
 
+  const busyOrChecking = busy || checking;
+
   return (
     <div className="h-full flex flex-col bg-bg">
-      {/* Header: branch + honest sync state */}
-      <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-border-subtle">
+      {/* Header: branch identity */}
+      <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-border-subtle">
         <div className="flex items-center gap-2 min-w-0">
           <GitBranch size={15} className="text-text-muted shrink-0" />
-          <span className="font-mono text-[12.5px] text-text truncate">{branch ?? '—'}</span>
+          <span className="font-mono text-[13px] text-text truncate">{branch ?? '—'}</span>
           {tracking && (
-            <span className="font-mono text-[11px] text-text-subtle truncate hidden sm:inline">
-              → {tracking}
-            </span>
-          )}
-          {synced && (
-            <span className="inline-flex items-center gap-1 text-[11px] text-emerald-500 ml-1 shrink-0">
-              <Check size={11} /> Up to date
-            </span>
+            <span className="font-mono text-[11px] text-text-subtle truncate">→ {tracking}</span>
           )}
         </div>
         <button
           onClick={() => refresh()}
-          disabled={busy}
+          disabled={busyOrChecking}
           className="p-1.5 rounded-md text-text-muted hover:bg-bg-hover hover:text-text transition-colors disabled:opacity-50"
-          title="Refresh"
+          title="Refresh status"
         >
           <RefreshCw size={13} className={busy ? 'animate-spin' : ''} />
         </button>
@@ -201,7 +208,7 @@ export function SourceControlPanel() {
 
       {/* Commit box — only when there's something to commit. */}
       {hasChanges && (
-        <div className="px-5 pt-4 pb-3 border-b border-border-subtle space-y-2.5">
+        <div className="px-5 pt-4 pb-4 border-b border-border-subtle space-y-2.5">
           <textarea
             value={message}
             onChange={(e) => setMessage(e.target.value)}
@@ -225,51 +232,59 @@ export function SourceControlPanel() {
         </div>
       )}
 
-      {/* Sync — adaptive: surfaces the next action (push / pull) prominently. */}
-      <div className="px-5 pt-3 pb-3 border-b border-border-subtle space-y-2">
+      {/* Sync — Pull + Push always side by side so both are one click away. */}
+      <div className="px-5 pt-4 pb-4 border-b border-border-subtle space-y-3">
         {!hasRemote ? (
           hasRepo && (
             <p className="text-[11.5px] text-text-subtle leading-snug">
-              No remote yet. Add one in Terminal (<code>git remote add origin …</code>) to push your
-              notes to GitHub.
+              No remote yet. Add one in Terminal (<code>git remote add origin …</code>) to sync your
+              notes with GitHub.
             </p>
           )
         ) : (
           <>
-            {ahead > 0 && (
-              <button
+            <div className="grid grid-cols-2 gap-2">
+              <SyncButton
+                onClick={onPull}
+                disabled={busyOrChecking}
+                active={behind > 0}
+                icon={<ArrowDown size={14} />}
+                label="Pull"
+                count={behind}
+              />
+              <SyncButton
                 onClick={onPush}
-                disabled={busy}
-                className="w-full px-3 py-2 bg-accent text-bg rounded-md text-[12.5px] font-medium hover:bg-accent-hover disabled:opacity-50 transition-colors inline-flex items-center justify-center gap-1.5"
-                title={`Push to ${tracking ?? 'remote'}`}
-              >
-                <ArrowUp size={13} /> Push {ahead} commit{ahead === 1 ? '' : 's'} to GitHub
-              </button>
-            )}
-            {behind > 0 && (
-              <button
-                onClick={onPull}
-                disabled={busy}
-                className={cn(
-                  'w-full px-3 py-2 rounded-md text-[12.5px] font-medium transition-colors inline-flex items-center justify-center gap-1.5 disabled:opacity-50',
-                  ahead > 0
-                    ? 'border border-border text-text-muted hover:bg-bg-hover hover:text-text'
-                    : 'bg-accent text-bg hover:bg-accent-hover'
+                disabled={busyOrChecking || ahead === 0}
+                active={ahead > 0}
+                icon={<ArrowUp size={14} />}
+                label="Push"
+                count={ahead}
+              />
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="inline-flex items-center gap-1.5 text-[11.5px] min-w-0">
+                {synced ? (
+                  <span className="inline-flex items-center gap-1.5 text-emerald-500">
+                    <Check size={12} className="shrink-0" /> Up to date with {tracking ?? 'remote'}
+                  </span>
+                ) : (
+                  <span className="text-text-muted truncate">
+                    {ahead > 0 && `${ahead} to push`}
+                    {ahead > 0 && behind > 0 && ' · '}
+                    {behind > 0 && `${behind} to pull`}
+                  </span>
                 )}
-              >
-                <ArrowDown size={13} /> Pull {behind} change{behind === 1 ? '' : 's'}
-              </button>
-            )}
-            {synced && (
+              </span>
               <button
-                onClick={onPull}
-                disabled={busy}
-                className="w-full px-3 py-1.5 border border-border rounded-md text-[12px] text-text-muted hover:bg-bg-hover hover:text-text disabled:opacity-50 transition-colors inline-flex items-center justify-center gap-1.5"
-                title="Check the remote for new changes"
+                onClick={onCheckForUpdates}
+                disabled={busyOrChecking}
+                className="inline-flex items-center gap-1.5 text-[11.5px] text-text-subtle hover:text-text transition-colors disabled:opacity-50 shrink-0"
+                title="Fetch the latest from GitHub"
               >
-                <ArrowDown size={12} /> Check for updates
+                <RefreshCw size={11} className={checking ? 'animate-spin' : ''} />
+                {checking ? 'Checking…' : 'Check for updates'}
               </button>
-            )}
+            </div>
           </>
         )}
         {lastError && (
@@ -284,12 +299,10 @@ export function SourceControlPanel() {
       <div className="flex-1 overflow-y-auto px-2 py-2">
         {staged.length === 0 && working.length === 0 && (
           <div className="h-full flex flex-col items-center justify-center gap-1.5 text-center px-6">
-            <GitCommit size={20} className="text-text-subtle" />
-            <p className="text-[12.5px] text-text-muted">No changes</p>
+            <Check size={20} className="text-text-subtle" />
+            <p className="text-[12.5px] text-text-muted">No local changes</p>
             <p className="text-[11.5px] text-text-subtle leading-snug">
-              {ahead > 0 && hasRemote
-                ? `${ahead} commit${ahead > 1 ? 's' : ''} ready to push.`
-                : 'Everything is committed. Edit a note and changes show up here.'}
+              Everything is committed. Edit a note and changes show up here.
             </p>
           </div>
         )}
@@ -354,6 +367,48 @@ export function SourceControlPanel() {
         )}
       </div>
     </div>
+  );
+}
+
+function SyncButton({
+  onClick,
+  disabled,
+  active,
+  icon,
+  label,
+  count,
+}: {
+  onClick: () => void;
+  disabled: boolean;
+  active: boolean;
+  icon: React.ReactNode;
+  label: string;
+  count: number;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        'px-3 py-2 rounded-md text-[12.5px] font-medium transition-colors inline-flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed',
+        active
+          ? 'bg-accent text-bg hover:bg-accent-hover'
+          : 'border border-border text-text-muted hover:bg-bg-hover hover:text-text'
+      )}
+    >
+      {icon}
+      {label}
+      {count > 0 && (
+        <span
+          className={cn(
+            'ml-0.5 px-1.5 rounded-full text-[10.5px] font-semibold tabular-nums',
+            active ? 'bg-bg/25 text-bg' : 'bg-bg-hover text-text-muted'
+          )}
+        >
+          {count}
+        </span>
+      )}
+    </button>
   );
 }
 

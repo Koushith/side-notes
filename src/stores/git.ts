@@ -12,10 +12,12 @@ interface GitState {
   behind: number;
   files: GitFileEntry[];
   busy: boolean;
+  checking: boolean;
   lastError: string | null;
   loaded: boolean;
 
   refresh: () => Promise<void>;
+  fetchRemote: () => Promise<void>;
   initRepo: () => Promise<void>;
   stage: (paths: string[]) => Promise<void>;
   unstage: (paths: string[]) => Promise<void>;
@@ -51,6 +53,7 @@ export const useGit = create<GitState>((set, get) => ({
   behind: 0,
   files: [],
   busy: false,
+  checking: false,
   lastError: null,
   loaded: false,
 
@@ -79,6 +82,21 @@ export const useGit = create<GitState>((set, get) => ({
     }
     applyStatus(set, res.status);
     set({ lastError: null });
+  },
+
+  // Hit the network to update remote-tracking refs, then refresh status so the
+  // ahead/behind counts are accurate. Used by the manual "Check for updates" action.
+  async fetchRemote() {
+    const vp = vaultPath();
+    if (!vp || get().checking || get().busy) return;
+    set({ checking: true, lastError: null });
+    const res = await api.git.fetch(vp);
+    set({ checking: false });
+    if (!res.ok) {
+      set({ lastError: res.error });
+      return;
+    }
+    await get().refresh();
   },
 
   async initRepo() {

@@ -123,6 +123,8 @@ const api = {
       ipcRenderer.invoke('git:push', vaultPath) as Promise<GitVoid>,
     pull: (vaultPath: string) =>
       ipcRenderer.invoke('git:pull', vaultPath) as Promise<GitVoid>,
+    fetch: (vaultPath: string) =>
+      ipcRenderer.invoke('git:fetch', vaultPath) as Promise<GitVoid>,
   },
   ai: {
     getSettings: () => ipcRenderer.invoke('ai:settings:get') as Promise<AISettingsView>,
