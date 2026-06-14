@@ -92,9 +92,11 @@ export function Lightbox() {
         }}
       >
         {content.kind === 'svg' ? (
+          // Theme-matched surface: the SVG was rendered with the app's light/dark
+          // palette, so a hardcoded white card hid dark-mode diagrams. Size the card
+          // to the diagram's natural pixels (text at designed size) and pan/zoom over it.
           <div
-            className="lightbox-svg [&_svg]:max-w-none [&_svg]:h-auto bg-white rounded-lg p-6 shadow-2xl"
-            style={{ width: 'min(86vw, 1400px)' }}
+            className="lightbox-svg inline-block [&_svg]:max-w-none [&_svg]:h-auto bg-bg border border-border rounded-lg p-6 shadow-2xl"
             dangerouslySetInnerHTML={{ __html: content.svg }}
           />
         ) : (
