@@ -8,10 +8,7 @@ import { bidirectional } from 'graphology-shortest-path/unweighted';
 import { useVault } from '@/stores/vault';
 import { useTheme } from '@/stores/theme';
 import { resolveWikilink } from '@/lib/markdown';
-import {
-  Maximize2, Focus, Network, Route, Layers, Clock, Zap, Filter, X,
-  ChevronDown, ChevronUp,
-} from 'lucide-react';
+import { Maximize2, Focus, Network, Route, Clock, Zap, Filter, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // ─── Theme helpers ───────────────────────────────────────────────────────────
@@ -45,16 +42,18 @@ const PALETTE_DARK = [
   '#c8a8ff', '#ffd166', '#7ee0c4', '#ff8a7a', '#a8b3d1',
 ];
 
-function buildCommunityColors(communityIds: number[], bgIsDark: boolean): Map<number, string> {
-  const palette = bgIsDark ? PALETTE_DARK : PALETTE_LIGHT;
+const GHOST_EXT_RE = /\.(canvas|base|pen|png|jpe?g|gif|webp|svg|pdf|mp3|mp4|webm|csv|json)$/i;
+
+function buildCommunityColors(communityIds: number[], dark: boolean): Map<number, string> {
+  const palette = dark ? PALETTE_DARK : PALETTE_LIGHT;
   const out = new Map<number, string>();
   const unique = [...new Set(communityIds)].sort((a, b) => a - b);
   unique.forEach((id, i) => out.set(id, palette[i % palette.length]));
   return out;
 }
 
-function buildFolderColors(folderKeys: string[], bgIsDark: boolean): Map<string, string> {
-  const palette = bgIsDark ? PALETTE_DARK : PALETTE_LIGHT;
+function buildFolderColors(folderKeys: string[], dark: boolean): Map<string, string> {
+  const palette = dark ? PALETTE_DARK : PALETTE_LIGHT;
   const sorted = [...new Set(folderKeys)].sort((a, b) => {
     if (a === '/') return -1;
     if (b === '/') return 1;
@@ -65,11 +64,19 @@ function buildFolderColors(folderKeys: string[], bgIsDark: boolean): Map<string,
   return out;
 }
 
-// ─── Particle system for edge animation ──────────────────────────────────────
+function hexToRgba(hex: string, alpha: number): string {
+  if (hex.startsWith('rgba') || hex.startsWith('rgb') || hex.startsWith('hsl')) return hex;
+  const h = hex.replace('#', '');
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+// ─── Particle system ─────────────────────────────────────────────────────────
 
 interface Particle {
-  edgeKey: string;
-  progress: number; // 0..1 along the edge
+  progress: number;
   speed: number;
   source: string;
   target: string;
@@ -80,10 +87,9 @@ function createParticles(graph: Graph, count: number): Particle[] {
   if (edges.length === 0) return [];
   const particles: Particle[] = [];
   for (let i = 0; i < count; i++) {
-    const edgeKey = edges[Math.floor(Math.random() * edges.length)];
-    const [source, target] = graph.extremities(edgeKey);
+    const edge = edges[Math.floor(Math.random() * edges.length)];
+    const [source, target] = graph.extremities(edge);
     particles.push({
-      edgeKey,
       progress: Math.random(),
       speed: 0.002 + Math.random() * 0.004,
       source,
@@ -92,8 +98,6 @@ function createParticles(graph: Graph, count: number): Particle[] {
   }
   return particles;
 }
-
-// ─── Color mode types ────────────────────────────────────────────────────────
 
 type ColorMode = 'folder' | 'cluster' | 'age';
 
@@ -106,10 +110,17 @@ export function GraphView() {
   const activeFile = useVault((s) => s.activeFile);
   const themeKey = useTheme((s) => s.theme);
   const themeMode = useTheme((s) => s.mode);
+
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sigmaRef = useRef<Sigma | null>(null);
-  const particleCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const graphRef = useRef<Graph | null>(null);
+  const particleCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // Rendering-only state kept in refs so changes don't rebuild the graph
+  const pathNodesRef = useRef<Set<string>>(new Set());
+  const showAgeRef = useRef(false);
+  const showParticlesRef = useRef(true);
+  const pathModeRef = useRef(false);
 
   const [hover, setHover] = useState<string | null>(null);
   const [localMode, setLocalMode] = useState(false);
@@ -120,11 +131,22 @@ export function GraphView() {
   const [pathStart, setPathStart] = useState<string | null>(null);
   const [pathEnd, setPathEnd] = useState<string | null>(null);
   const [pathNodes, setPathNodes] = useState<Set<string>>(new Set());
-  const [depthFilter, setDepthFilter] = useState(2); // local mode depth
+  const [depthFilter, setDepthFilter] = useState(2);
   const [filterFolders, setFilterFolders] = useState<Set<string>>(new Set());
   const [showControls, setShowControls] = useState(false);
 
-  // Compute path when both endpoints are selected
+  // Sync rendering refs
+  useEffect(() => { pathNodesRef.current = pathNodes; }, [pathNodes]);
+  useEffect(() => { showAgeRef.current = showAge; }, [showAge]);
+  useEffect(() => { showParticlesRef.current = showParticles; }, [showParticles]);
+  useEffect(() => { pathModeRef.current = pathMode; }, [pathMode]);
+
+  // Trigger Sigma refresh when rendering-only state changes (no graph rebuild)
+  useEffect(() => {
+    sigmaRef.current?.refresh({ skipIndexation: true });
+  }, [pathNodes, showAge]);
+
+  // Compute shortest path
   useEffect(() => {
     if (!pathStart || !pathEnd || !graphRef.current) {
       setPathNodes(new Set());
@@ -136,27 +158,18 @@ export function GraphView() {
       return;
     }
     const path = bidirectional(graph, pathStart, pathEnd);
-    if (path) {
-      setPathNodes(new Set(path));
-    } else {
-      setPathNodes(new Set());
-    }
+    setPathNodes(path ? new Set(path) : new Set());
   }, [pathStart, pathEnd]);
 
   const { nodeCount, edgeCount } = useMemo(() => {
     let edges = 0;
     const filesArr = [...files.values()];
     const ghosts = new Set<string>();
-    const ghostExtRe = /\.(canvas|base|pen|png|jpe?g|gif|webp|svg|pdf|mp3|mp4|webm|csv|json)$/i;
     for (const f of filesArr) {
       for (const link of f.links) {
         const r = resolveWikilink(link, filesArr);
-        if (r) {
-          edges++;
-        } else if (ghostExtRe.test(link)) {
-          edges++;
-          ghosts.add(link);
-        }
+        if (r) edges++;
+        else if (GHOST_EXT_RE.test(link)) { edges++; ghosts.add(link); }
       }
     }
     return { nodeCount: filesArr.length + ghosts.size, edgeCount: edges };
@@ -169,6 +182,7 @@ export function GraphView() {
       keys.push(f.rel.includes('/') ? top : '/');
     }
     return buildFolderColors(keys, isBgDark());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [files, themeMode, themeKey]);
 
   const folderLegend = useMemo(() => {
@@ -181,7 +195,12 @@ export function GraphView() {
     return [...counts.entries()]
       .sort((a, b) => b[1] - a[1])
       .slice(0, 10)
-      .map(([key, count]) => ({ key, label: key === '/' ? 'root' : key, count, color: folderColors.get(key) ?? PALETTE_LIGHT[0] }));
+      .map(([key, count]) => ({
+        key,
+        label: key === '/' ? 'root' : key,
+        count,
+        color: folderColors.get(key) ?? PALETTE_LIGHT[0],
+      }));
   }, [files, folderColors]);
 
   const resetPath = useCallback(() => {
@@ -191,7 +210,8 @@ export function GraphView() {
     setPathNodes(new Set());
   }, []);
 
-  // ─── Main graph effect ───────────────────────────────────────────────────
+  // ─── Main graph effect ─────────────────────────────────────────────────────
+  // Only rebuilds when structure/color changes. Rendering-only state uses refs.
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -199,42 +219,43 @@ export function GraphView() {
     if (filesArr.length === 0) return;
 
     const graph = new Graph({ multi: false, type: 'undirected' });
-    const GHOST_EXT_RE = /\.(canvas|base|pen|png|jpe?g|gif|webp|svg|pdf|mp3|mp4|webm|csv|json)$/i;
     const degree = new Map<string, number>();
-    const edges: [string, string][] = [];
+    const edgeList: [string, string][] = [];
     const ghosts = new Map<string, string>();
 
     for (const f of filesArr) {
-      degree.set(f.rel, degree.get(f.rel) ?? 0);
+      degree.set(f.rel, 0);
       for (const link of f.links) {
         const r = resolveWikilink(link, filesArr);
         if (r && r !== f.rel) {
           const a = f.rel < r ? f.rel : r;
           const b = f.rel < r ? r : f.rel;
-          edges.push([a, b]);
+          edgeList.push([a, b]);
           degree.set(a, (degree.get(a) ?? 0) + 1);
           degree.set(b, (degree.get(b) ?? 0) + 1);
         } else if (!r && GHOST_EXT_RE.test(link)) {
           const ghostId = `ghost::${link}`;
           if (!ghosts.has(ghostId)) ghosts.set(ghostId, link.split('/').pop() || link);
-          edges.push([f.rel, ghostId]);
+          edgeList.push([f.rel, ghostId]);
           degree.set(f.rel, (degree.get(f.rel) ?? 0) + 1);
           degree.set(ghostId, (degree.get(ghostId) ?? 0) + 1);
         }
       }
     }
 
-    // Compute age for time-based opacity (0 = oldest, 1 = newest)
-    const mtimes = filesArr.map((f) => f.mtime);
-    const minMtime = Math.min(...mtimes);
-    const maxMtime = Math.max(...mtimes);
+    // Age normalization
+    let minMtime = Infinity, maxMtime = -Infinity;
+    for (const f of filesArr) {
+      if (f.mtime < minMtime) minMtime = f.mtime;
+      if (f.mtime > maxMtime) maxMtime = f.mtime;
+    }
     const mtimeRange = maxMtime - minMtime || 1;
+    const bgDark = isBgDark();
 
     for (const f of filesArr) {
       const d = degree.get(f.rel) ?? 0;
       const top = f.rel.split('/')[0];
       const folderKey = f.rel.includes('/') ? top : '/';
-      const age = (f.mtime - minMtime) / mtimeRange; // 0..1
       graph.addNode(f.rel, {
         label: f.name,
         x: Math.random(),
@@ -242,12 +263,11 @@ export function GraphView() {
         size: 3 + Math.min(d, 14) * 0.7,
         color: folderColors.get(folderKey) ?? PALETTE_LIGHT[0],
         folderKey,
-        age,
-        mtime: f.mtime,
+        age: (f.mtime - minMtime) / mtimeRange,
       });
     }
 
-    const ghostColor = isBgDark() ? 'rgba(180, 175, 165, 0.55)' : 'rgba(120, 114, 100, 0.55)';
+    const ghostColor = bgDark ? 'rgba(180, 175, 165, 0.55)' : 'rgba(120, 114, 100, 0.55)';
     for (const [ghostId, label] of ghosts) {
       const d = degree.get(ghostId) ?? 0;
       graph.addNode(ghostId, {
@@ -258,21 +278,18 @@ export function GraphView() {
         color: ghostColor,
         folderKey: '__ghost__',
         age: 0,
-        mtime: 0,
       });
     }
 
     const seen = new Set<string>();
-    for (const [a, b] of edges) {
+    for (const [a, b] of edgeList) {
       const k = `${a}::${b}`;
       if (seen.has(k)) continue;
       seen.add(k);
-      try {
-        graph.addEdge(a, b, { size: 1.4 });
-      } catch { /* dup */ }
+      try { graph.addEdge(a, b, { size: 1.4 }); } catch { /* dup */ }
     }
 
-    // Local mode: filter to neighborhood
+    // Local mode: BFS to depthFilter hops
     if (localMode && activeFile && graph.hasNode(activeFile)) {
       const keep = new Set<string>([activeFile]);
       let frontier = new Set<string>([activeFile]);
@@ -280,10 +297,7 @@ export function GraphView() {
         const next = new Set<string>();
         for (const n of frontier) {
           for (const nb of graph.neighbors(n)) {
-            if (!keep.has(nb)) {
-              keep.add(nb);
-              next.add(nb);
-            }
+            if (!keep.has(nb)) { keep.add(nb); next.add(nb); }
           }
         }
         frontier = next;
@@ -293,102 +307,88 @@ export function GraphView() {
       }
     }
 
-    // Folder filter
+    // Folder visibility filter
     if (filterFolders.size > 0) {
       for (const n of graph.nodes()) {
         const fk = graph.getNodeAttribute(n, 'folderKey');
-        if (fk !== '__ghost__' && filterFolders.has(fk)) {
-          graph.dropNode(n);
-        }
+        if (fk !== '__ghost__' && filterFolders.has(fk)) graph.dropNode(n);
       }
     }
 
     if (graph.order === 0) return;
 
-    // Community detection (Louvain)
+    // Community detection
     let communities: Record<string, number> = {};
-    try {
-      communities = louvain(graph);
-    } catch { /* graph too small */ }
+    try { communities = louvain(graph); } catch { /* too small */ }
+    const communityColors = buildCommunityColors(Object.values(communities), bgDark);
 
-    const communityIds = Object.values(communities);
-    const communityColors = buildCommunityColors(communityIds, isBgDark());
-
-    // Assign community data + recolor based on mode
-    for (const node of graph.nodes()) {
+    // Apply node colors based on mode
+    graph.forEachNode((node) => {
+      const fk = graph.getNodeAttribute(node, 'folderKey');
+      if (fk === '__ghost__') return;
       const comm = communities[node] ?? 0;
       graph.setNodeAttribute(node, 'community', comm);
+
       if (colorMode === 'cluster') {
-        const fk = graph.getNodeAttribute(node, 'folderKey');
-        if (fk !== '__ghost__') {
-          graph.setNodeAttribute(node, 'color', communityColors.get(comm) ?? PALETTE_DARK[0]);
-        }
+        graph.setNodeAttribute(node, 'color', communityColors.get(comm) ?? PALETTE_DARK[0]);
       } else if (colorMode === 'age') {
         const age = graph.getNodeAttribute(node, 'age') as number;
-        const fk = graph.getNodeAttribute(node, 'folderKey');
-        if (fk !== '__ghost__') {
-          const bgDark = isBgDark();
-          const hue = age * 120; // red (old) -> green (new)
-          const sat = bgDark ? '70%' : '60%';
-          const lit = bgDark ? '65%' : '45%';
-          graph.setNodeAttribute(node, 'color', `hsl(${hue}, ${sat}, ${lit})`);
-        }
+        const hue = age * 120;
+        const sat = bgDark ? '70%' : '60%';
+        const lit = bgDark ? '65%' : '45%';
+        graph.setNodeAttribute(node, 'color', `hsl(${hue}, ${sat}, ${lit})`);
       }
-    }
+    });
 
-    // ForceAtlas2 with community-aware gravity
+    // Layout
     const settings = { ...forceAtlas2.inferSettings(graph), slowDown: 10 };
     forceAtlas2.assign(graph, { iterations: 100, settings: { ...settings, slowDown: 1 } });
-
     graphRef.current = graph;
 
-    // ─── Sigma renderer ─────────────────────────────────────────────────────
+    // ─── Sigma renderer ──────────────────────────────────────────────────────
 
-    const bgIsDark = isBgDark();
     const accentColor = readVar('--c-accent');
-    const edgeColor = bgIsDark ? readVarRgba('--c-text', 0.5) : readVarRgba('--c-text-muted', 0.5);
-    const edgeFadeColor = bgIsDark ? readVarRgba('--c-text', 0.12) : readVarRgba('--c-text-subtle', 0.2);
-    const nodeFadeColor = bgIsDark ? readVarRgba('--c-text', 0.25) : readVar('--c-text-subtle');
-    const labelInkColor = bgIsDark ? readVarRgba('--c-text', 0.78) : readVarRgba('--c-text-muted', 0.95);
-    const labelBgColor = bgIsDark ? readVar('--c-text') : readVar('--c-bg-elevated');
-    const labelTextColor = bgIsDark ? readVar('--c-bg') : readVar('--c-text');
+    const edgeColor = bgDark ? readVarRgba('--c-text', 0.5) : readVarRgba('--c-text-muted', 0.5);
+    const edgeFadeColor = bgDark ? readVarRgba('--c-text', 0.12) : readVarRgba('--c-text-subtle', 0.2);
+    const nodeFadeColor = bgDark ? readVarRgba('--c-text', 0.25) : readVar('--c-text-subtle');
+    const labelInkColor = bgDark ? readVarRgba('--c-text', 0.78) : readVarRgba('--c-text-muted', 0.95);
+    const labelBgColor = bgDark ? readVar('--c-text') : readVar('--c-bg-elevated');
+    const labelTextColor = bgDark ? readVar('--c-bg') : readVar('--c-text');
     const labelBorderColor = readVar('--c-border');
+    const particleColor = bgDark ? 'rgba(124, 140, 255, 0.7)' : 'rgba(79, 108, 201, 0.6)';
 
-    function drawPillLabel(
-      context: CanvasRenderingContext2D,
+    const drawPillLabel = (
+      ctx: CanvasRenderingContext2D,
       label: string,
       nodeX: number, nodeY: number, nodeSize: number,
       fontSize: number, fontFamily: string, fontWeight: string | number,
-      withBorder: boolean,
-    ) {
-      context.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
-      const w = context.measureText(label).width;
+    ) => {
+      ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
+      const w = ctx.measureText(label).width;
       const padX = 6, padY = 3;
       const x = nodeX + nodeSize + 4;
       const y = nodeY - fontSize / 2 - padY;
       const h = fontSize + padY * 2;
       const r = h / 2;
-      context.beginPath();
-      context.moveTo(x + r, y);
-      context.lineTo(x + w + padX * 2 - r, y);
-      context.quadraticCurveTo(x + w + padX * 2, y, x + w + padX * 2, y + r);
-      context.lineTo(x + w + padX * 2, y + h - r);
-      context.quadraticCurveTo(x + w + padX * 2, y + h, x + w + padX * 2 - r, y + h);
-      context.lineTo(x + r, y + h);
-      context.quadraticCurveTo(x, y + h, x, y + h - r);
-      context.lineTo(x, y + r);
-      context.quadraticCurveTo(x, y, x + r, y);
-      context.closePath();
-      context.fillStyle = labelBgColor;
-      context.fill();
-      if (withBorder) {
-        context.strokeStyle = labelBorderColor;
-        context.lineWidth = 1;
-        context.stroke();
-      }
-      context.fillStyle = labelTextColor;
-      context.fillText(label, x + padX, y + fontSize + padY - 3);
-    }
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w + padX * 2 - r, y);
+      ctx.quadraticCurveTo(x + w + padX * 2, y, x + w + padX * 2, y + r);
+      ctx.lineTo(x + w + padX * 2, y + h - r);
+      ctx.quadraticCurveTo(x + w + padX * 2, y + h, x + w + padX * 2 - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+      ctx.fillStyle = labelBgColor;
+      ctx.fill();
+      ctx.strokeStyle = labelBorderColor;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = labelTextColor;
+      ctx.fillText(label, x + padX, y + fontSize + padY - 3);
+    };
 
     const renderer = new Sigma(graph, containerRef.current, {
       renderEdgeLabels: false,
@@ -403,62 +403,48 @@ export function GraphView() {
       defaultEdgeColor: edgeColor,
       minCameraRatio: 0.1,
       maxCameraRatio: 10,
-      defaultDrawNodeLabel: (context, data, settings) => {
+      defaultDrawNodeLabel: (ctx, data, s) => {
         if (!data.label || typeof data.label !== 'string') return;
-        context.font = `${settings.labelWeight} ${settings.labelSize}px ${settings.labelFont}`;
-        context.fillStyle = labelInkColor;
-        context.fillText(data.label, data.x + data.size + 4, data.y + settings.labelSize / 3);
+        ctx.font = `${s.labelWeight} ${s.labelSize}px ${s.labelFont}`;
+        ctx.fillStyle = labelInkColor;
+        ctx.fillText(data.label, data.x + data.size + 4, data.y + s.labelSize / 3);
       },
-      defaultDrawNodeHover: (context, data, settings) => {
+      defaultDrawNodeHover: (ctx, data, s) => {
         if (!data.label || typeof data.label !== 'string') return;
-        drawPillLabel(context, data.label, data.x, data.y, data.size, settings.labelSize, settings.labelFont, settings.labelWeight, true);
+        drawPillLabel(ctx, data.label, data.x, data.y, data.size, s.labelSize, s.labelFont, s.labelWeight);
       },
     });
 
     sigmaRef.current = renderer;
 
-    // ─── Interactions ──────────────────────────────────────────────────────
+    // ─── Reducers (read from refs for rendering-only state) ──────────────────
 
     let hovered: string | null = null;
 
-    const computeHighlightSet = (n: string): Set<string> => {
-      const set = new Set<string>([n]);
-      for (const nb of graph.neighbors(n)) set.add(nb);
-      return set;
-    };
-
     renderer.setSetting('nodeReducer', (node, data) => {
-      // Path highlight mode
-      if (pathNodes.size > 0) {
-        if (pathNodes.has(node)) {
-          return { ...data, size: data.size * 1.6, color: accentColor, zIndex: 2 };
-        }
+      const pn = pathNodesRef.current;
+      if (pn.size > 0) {
+        if (pn.has(node)) return { ...data, size: data.size * 1.6, color: accentColor, zIndex: 2 };
         return { ...data, color: nodeFadeColor, label: '', zIndex: 0 };
       }
-      // Time-based opacity
-      if (showAge) {
+      if (showAgeRef.current) {
         const age = graph.getNodeAttribute(node, 'age') as number;
-        const opacity = 0.3 + age * 0.7;
         const sizeBoost = 1 + age * 0.4;
-        const baseData = { ...data, size: data.size * sizeBoost };
-        if (data.color && data.color.startsWith('hsl')) {
-          return baseData;
-        }
-        const hex = data.color || '#888';
-        return { ...baseData, color: hexToRgba(hex, opacity) };
+        const sized = { ...data, size: data.size * sizeBoost };
+        if (data.color?.startsWith('hsl')) return sized;
+        return { ...sized, color: hexToRgba(data.color || '#888', 0.3 + age * 0.7) };
       }
       if (!hovered) return data;
-      const highlight = computeHighlightSet(hovered);
-      if (highlight.has(node)) return { ...data, zIndex: 1 };
+      const isNeighbor = node === hovered || graph.hasEdge(node, hovered) || graph.hasEdge(hovered, node);
+      if (isNeighbor) return { ...data, zIndex: 1 };
       return { ...data, color: nodeFadeColor, label: '', zIndex: 0 };
     });
 
     renderer.setSetting('edgeReducer', (edge, data) => {
-      if (pathNodes.size > 0) {
+      const pn = pathNodesRef.current;
+      if (pn.size > 0) {
         const [s, t] = graph.extremities(edge);
-        if (pathNodes.has(s) && pathNodes.has(t)) {
-          return { ...data, color: accentColor, size: 3 };
-        }
+        if (pn.has(s) && pn.has(t)) return { ...data, color: accentColor, size: 3 };
         return { ...data, color: edgeFadeColor, size: 0.5 };
       }
       if (!hovered) return data;
@@ -467,16 +453,16 @@ export function GraphView() {
       return { ...data, color: edgeFadeColor };
     });
 
+    // ─── Interactions ────────────────────────────────────────────────────────
+
     renderer.on('clickNode', ({ node }) => {
-      if (pathMode) {
-        if (!pathStart) {
-          setPathStart(node);
-        } else if (!pathEnd && node !== pathStart) {
-          setPathEnd(node);
-        } else {
-          setPathStart(node);
+      if (pathModeRef.current) {
+        setPathStart((prev) => {
+          if (!prev) return node;
+          if (prev !== node) { setPathEnd(node); return prev; }
           setPathEnd(null);
-        }
+          return node;
+        });
         return;
       }
       if (node.startsWith('ghost::')) return;
@@ -487,14 +473,14 @@ export function GraphView() {
     renderer.on('enterNode', ({ node }) => {
       hovered = node;
       setHover(node);
-      containerRef.current!.style.cursor = pathMode ? 'crosshair' : 'pointer';
+      containerRef.current!.style.cursor = pathModeRef.current ? 'crosshair' : 'pointer';
       renderer.refresh({ skipIndexation: true });
     });
 
     renderer.on('leaveNode', () => {
       hovered = null;
       setHover(null);
-      containerRef.current!.style.cursor = pathMode ? 'crosshair' : 'default';
+      containerRef.current!.style.cursor = pathModeRef.current ? 'crosshair' : 'default';
       renderer.refresh({ skipIndexation: true });
     });
 
@@ -502,7 +488,7 @@ export function GraphView() {
     let dragNode: string | null = null;
     let isDragging = false;
     renderer.on('downNode', (e) => {
-      if (pathMode) return;
+      if (pathModeRef.current) return;
       isDragging = true;
       dragNode = e.node;
       graph.setNodeAttribute(dragNode, 'highlighted', true);
@@ -524,90 +510,91 @@ export function GraphView() {
     renderer.getMouseCaptor().on('mouseup', stopDrag);
     renderer.getMouseCaptor().on('mouseleave', stopDrag);
 
-    // ─── Physics + particles RAF loop ──────────────────────────────────────
+    // ─── Physics + particles ─────────────────────────────────────────────────
 
-    let particles = showParticles ? createParticles(graph, Math.min(graph.size * 2, 200)) : [];
+    let particles = createParticles(graph, Math.min(graph.size * 2, 200));
+    const cachedEdges = graph.edges();
     let cancelled = false;
     let rafId: number | null = null;
-    let physicsFrame = 0;
+    let frame = 0;
+    let convergedCount = 0;
     let converged = false;
-    let convergedFrames = 0;
+
+    // Pre-allocate position arrays for convergence check (avoids Map per frame)
+    const nodeArr = graph.nodes();
+    const prevX = new Float64Array(nodeArr.length);
+    const prevY = new Float64Array(nodeArr.length);
 
     const tick = () => {
       if (cancelled) return;
 
-      // Physics with convergence detection
-      if (!isDragging && !converged && physicsFrame % 2 === 0) {
-        const prevPositions = new Map<string, { x: number; y: number }>();
-        graph.forEachNode((n) => {
-          prevPositions.set(n, { x: graph.getNodeAttribute(n, 'x'), y: graph.getNodeAttribute(n, 'y') });
-        });
+      // Physics (every other frame, stops once converged)
+      if (!isDragging && !converged && frame % 2 === 0) {
+        for (let i = 0; i < nodeArr.length; i++) {
+          prevX[i] = graph.getNodeAttribute(nodeArr[i], 'x');
+          prevY[i] = graph.getNodeAttribute(nodeArr[i], 'y');
+        }
         forceAtlas2.assign(graph, { iterations: 1, settings });
-        let totalDisplacement = 0;
-        graph.forEachNode((n) => {
-          const prev = prevPositions.get(n)!;
-          const dx = graph.getNodeAttribute(n, 'x') - prev.x;
-          const dy = graph.getNodeAttribute(n, 'y') - prev.y;
-          totalDisplacement += Math.sqrt(dx * dx + dy * dy);
-        });
-        if (totalDisplacement < 0.05 * graph.order) {
-          convergedFrames++;
-          if (convergedFrames > 30) converged = true;
+        let disp = 0;
+        for (let i = 0; i < nodeArr.length; i++) {
+          const dx = graph.getNodeAttribute(nodeArr[i], 'x') - prevX[i];
+          const dy = graph.getNodeAttribute(nodeArr[i], 'y') - prevY[i];
+          disp += dx * dx + dy * dy;
+        }
+        if (disp < 0.0025 * nodeArr.length) {
+          if (++convergedCount > 30) converged = true;
         } else {
-          convergedFrames = 0;
+          convergedCount = 0;
         }
       }
-      physicsFrame++;
+
+      frame++;
       renderer.refresh({ skipIndexation: false });
 
-      // Particle animation on overlay canvas
-      if (showParticles && particleCanvasRef.current && particles.length > 0) {
+      // Particles
+      if (showParticlesRef.current && particleCanvasRef.current && particles.length > 0) {
         const canvas = particleCanvasRef.current;
         const ctx = canvas.getContext('2d');
         if (ctx) {
           const { width, height } = canvas.getBoundingClientRect();
-          if (canvas.width !== width * 2 || canvas.height !== height * 2) {
-            canvas.width = width * 2;
-            canvas.height = height * 2;
-            ctx.scale(2, 2);
+          const dpr = 2;
+          const cw = width * dpr, ch = height * dpr;
+          if (canvas.width !== cw || canvas.height !== ch) {
+            canvas.width = cw;
+            canvas.height = ch;
+            ctx.scale(dpr, dpr);
           }
           ctx.clearRect(0, 0, width, height);
+          ctx.fillStyle = particleColor;
 
-          const camera = renderer.getCamera().getState();
           for (const p of particles) {
             if (!graph.hasNode(p.source) || !graph.hasNode(p.target)) continue;
             const sx = graph.getNodeAttribute(p.source, 'x');
             const sy = graph.getNodeAttribute(p.source, 'y');
             const tx = graph.getNodeAttribute(p.target, 'x');
             const ty = graph.getNodeAttribute(p.target, 'y');
-
-            const gx = sx + (tx - sx) * p.progress;
-            const gy = sy + (ty - sy) * p.progress;
-
-            // Graph coords to viewport
-            const viewCoords = renderer.graphToViewport({ x: gx, y: gy });
-
+            const vp = renderer.graphToViewport({
+              x: sx + (tx - sx) * p.progress,
+              y: sy + (ty - sy) * p.progress,
+            });
             ctx.beginPath();
-            ctx.arc(viewCoords.x, viewCoords.y, 1.5, 0, Math.PI * 2);
-            ctx.fillStyle = bgIsDark ? 'rgba(124, 140, 255, 0.7)' : 'rgba(79, 108, 201, 0.6)';
+            ctx.arc(vp.x, vp.y, 1.5, 0, Math.PI * 2);
             ctx.fill();
 
             p.progress += p.speed;
             if (p.progress >= 1) {
               p.progress = 0;
-              // Move to a random edge
-              const edgeKeys = graph.edges();
-              if (edgeKeys.length > 0) {
-                const newEdge = edgeKeys[Math.floor(Math.random() * edgeKeys.length)];
-                const [s, t] = graph.extremities(newEdge);
-                p.edgeKey = newEdge;
-                p.source = s;
-                p.target = t;
-                p.speed = 0.002 + Math.random() * 0.004;
-              }
+              const edge = cachedEdges[Math.floor(Math.random() * cachedEdges.length)];
+              const [s, t] = graph.extremities(edge);
+              p.source = s;
+              p.target = t;
+              p.speed = 0.002 + Math.random() * 0.004;
             }
           }
         }
+      } else if (particleCanvasRef.current) {
+        const ctx = particleCanvasRef.current.getContext('2d');
+        if (ctx) ctx.clearRect(0, 0, particleCanvasRef.current.width, particleCanvasRef.current.height);
       }
 
       rafId = requestAnimationFrame(tick);
@@ -621,17 +608,18 @@ export function GraphView() {
       sigmaRef.current = null;
       graphRef.current = null;
     };
-  }, [files, folderColors, activeFile, localMode, depthFilter, openFile, setView, themeKey, themeMode, colorMode, showAge, showParticles, pathMode, pathNodes, filterFolders]);
+    // Note: pathNodes/showAge/showParticles/pathMode intentionally excluded (use refs)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [files, folderColors, activeFile, localMode, depthFilter, colorMode, filterFolders, openFile, setView, themeKey, themeMode]);
 
-  // ─── Hover info ──────────────────────────────────────────────────────────
+  // ─── Hover info ────────────────────────────────────────────────────────────
 
   const hoverFile = hover ? files.get(hover) : null;
   const hoverInfo = useMemo(() => {
     if (!hoverFile) return null;
-    const age = Date.now() - hoverFile.mtime;
-    const days = Math.floor(age / (1000 * 60 * 60 * 24));
+    const days = Math.floor((Date.now() - hoverFile.mtime) / 86_400_000);
     const links = hoverFile.links.length;
-    let timeStr = '';
+    let timeStr: string;
     if (days === 0) timeStr = 'today';
     else if (days === 1) timeStr = 'yesterday';
     else if (days < 30) timeStr = `${days}d ago`;
@@ -640,20 +628,18 @@ export function GraphView() {
     return { title: hoverFile.title || hoverFile.name, timeStr, links, tags: hoverFile.tags.slice(0, 3) };
   }, [hoverFile]);
 
-  // ─── Render ──────────────────────────────────────────────────────────────
+  // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="relative w-full h-full bg-bg overflow-hidden">
       <div ref={containerRef} className="absolute inset-0" />
-      {showParticles && (
-        <canvas
-          ref={particleCanvasRef}
-          className="absolute inset-0 pointer-events-none"
-          style={{ width: '100%', height: '100%' }}
-        />
-      )}
+      <canvas
+        ref={particleCanvasRef}
+        className="absolute inset-0 pointer-events-none"
+        style={{ width: '100%', height: '100%' }}
+      />
 
-      {/* ─── Top-left stats + legend ─── */}
+      {/* Stats + legend */}
       <div className="absolute top-3 left-3 flex flex-col gap-2 pointer-events-none z-10">
         <div className="px-3 py-2 rounded-lg bg-bg-elevated/80 backdrop-blur border border-border font-mono text-[10.5px] uppercase tracking-[0.08em] flex items-center gap-2">
           <span className="text-text-muted">{nodeCount} notes</span>
@@ -691,7 +677,7 @@ export function GraphView() {
         )}
       </div>
 
-      {/* ─── Hover info card ─── */}
+      {/* Hover card */}
       {hoverInfo && (
         <div className="absolute bottom-3 left-3 px-3 py-2 rounded-lg bg-bg-elevated/90 backdrop-blur border border-border text-xs pointer-events-none z-10">
           <div className="font-medium text-text mb-0.5">{hoverInfo.title}</div>
@@ -709,7 +695,7 @@ export function GraphView() {
         </div>
       )}
 
-      {/* ─── Path finder banner ─── */}
+      {/* Path finder banner */}
       {pathMode && (
         <div className="absolute top-3 left-1/2 -translate-x-1/2 px-4 py-2 rounded-lg bg-accent/10 backdrop-blur border border-accent/30 text-xs text-accent flex items-center gap-3 z-10">
           <Route size={14} />
@@ -728,7 +714,7 @@ export function GraphView() {
         </div>
       )}
 
-      {/* ─── Right controls ─── */}
+      {/* Controls */}
       <div className="absolute top-3 right-3 flex flex-col gap-2 z-10">
         <div className="flex gap-2">
           <button
@@ -783,10 +769,8 @@ export function GraphView() {
           </button>
         </div>
 
-        {/* ─── Expanded controls panel ─── */}
         {showControls && (
           <div className="px-3 py-3 rounded-lg bg-bg-elevated/90 backdrop-blur border border-border text-xs space-y-3 min-w-[180px]">
-            {/* Color mode */}
             <div>
               <div className="text-[10px] uppercase tracking-wider text-text-subtle mb-1.5">Color by</div>
               <div className="flex gap-1">
@@ -807,7 +791,6 @@ export function GraphView() {
               </div>
             </div>
 
-            {/* Toggles */}
             <div className="flex flex-col gap-1.5">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -831,7 +814,6 @@ export function GraphView() {
               </label>
             </div>
 
-            {/* Local depth slider */}
             {localMode && (
               <div>
                 <div className="text-[10px] uppercase tracking-wider text-text-subtle mb-1">Depth: {depthFilter}</div>
@@ -846,7 +828,6 @@ export function GraphView() {
               </div>
             )}
 
-            {/* Folder filter */}
             {folderLegend.length > 1 && (
               <div>
                 <div className="text-[10px] uppercase tracking-wider text-text-subtle mb-1.5">Hide folders</div>
@@ -877,7 +858,6 @@ export function GraphView() {
         )}
       </div>
 
-      {/* ─── Empty state ─── */}
       {nodeCount === 0 && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="text-center max-w-sm">
@@ -890,15 +870,4 @@ export function GraphView() {
       )}
     </div>
   );
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function hexToRgba(hex: string, alpha: number): string {
-  if (hex.startsWith('rgba') || hex.startsWith('rgb') || hex.startsWith('hsl')) return hex;
-  const h = hex.replace('#', '');
-  const r = parseInt(h.substring(0, 2), 16);
-  const g = parseInt(h.substring(2, 4), 16);
-  const b = parseInt(h.substring(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
