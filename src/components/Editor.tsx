@@ -12,6 +12,8 @@ import TableHeader from '@tiptap/extension-table-header';
 import { createLowlight, common } from 'lowlight';
 import { MermaidCodeBlock } from './extensions/MermaidCodeBlock';
 import { Markdown } from 'tiptap-markdown';
+import Highlight from '@tiptap/extension-highlight';
+import Typography from '@tiptap/extension-typography';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVault } from '@/stores/vault';
 import { useEditorRef } from '@/stores/editorRef';
@@ -29,6 +31,9 @@ import { TableBubbleMenu } from './TableBubbleMenu';
 import { ViewModeTabs } from './ViewModeTabs';
 import { DailyNoteHeader, isDailyNote } from './DailyNoteHeader';
 import { TodoNoteHeader, isTodoNote } from './TodoNoteHeader';
+import { IntelligenceHints } from './IntelligenceHints';
+import { InlineAI } from './InlineAI';
+import { useNoteIntelligence, NoteContext } from '@/stores/noteIntelligence';
 import { toast } from './Toast';
 import { resolveWikilink } from '@/lib/markdown';
 import { api } from '@/lib/api';
@@ -70,6 +75,7 @@ export function Editor({ rel, vaultPath }: EditorProps) {
     range: null,
     rect: null,
   });
+  const [inlineAIOpen, setInlineAIOpen] = useState(false);
   const editorRef = useRef<TiptapEditor | null>(null);
   const saveTimer = useRef<number | null>(null);
   const lastSavedRel = useRef<string>(rel);
@@ -93,7 +99,8 @@ export function Editor({ rel, vaultPath }: EditorProps) {
     {
       extensions: [
         StarterKit.configure({
-          codeBlock: false, // we use lowlight instead
+          codeBlock: false,
+          dropcursor: { color: 'rgb(var(--c-accent))', width: 2 },
         }),
         MermaidCodeBlock.configure({ lowlight }),
         Link.configure({ openOnClick: false, HTMLAttributes: { rel: 'noopener noreferrer' } }),
@@ -107,6 +114,8 @@ export function Editor({ rel, vaultPath }: EditorProps) {
         TableRow,
         TableHeader,
         TableCell,
+        Highlight.configure({ multicolor: false }),
+        Typography,
         Markdown.configure({
           html: true,
           linkify: false,
@@ -211,6 +220,39 @@ export function Editor({ rel, vaultPath }: EditorProps) {
       }
     };
   }, [editor]);
+
+  // Intelligence watcher - feeds editor content to the AI intelligence layer.
+  const intelligenceEnabled = useNoteIntelligence((s) => s.enabled);
+  const analyzeContent = useNoteIntelligence((s) => s.analyzeContent);
+  const onPause = useNoteIntelligence((s) => s.onPause);
+  const pauseTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!editor || !intelligenceEnabled) return;
+    const handler = () => {
+      const md = editor.storage.markdown?.getMarkdown?.() ?? editor.state.doc.textContent;
+      const allNotes: NoteContext[] = [...files.values()]
+        .filter((f) => f.rel !== rel)
+        .slice(0, 50)
+        .map((f) => ({ rel: f.rel, title: f.title || f.name, tags: f.tags }));
+      analyzeContent(rel, md, allNotes);
+
+      if (pauseTimerRef.current) window.clearTimeout(pauseTimerRef.current);
+      pauseTimerRef.current = window.setTimeout(() => {
+        const { to } = editor.state.selection;
+        const docEnd = editor.state.doc.content.size;
+        if (docEnd - to < 5) {
+          const latestMd = editor.storage.markdown?.getMarkdown?.() ?? editor.state.doc.textContent;
+          onPause(rel, latestMd);
+        }
+      }, 5000) as unknown as number;
+    };
+    editor.on('update', handler);
+    return () => {
+      editor.off('update', handler);
+      if (pauseTimerRef.current) window.clearTimeout(pauseTimerRef.current);
+    };
+  }, [editor, intelligenceEnabled, rel]);
 
   async function insertImage(file: File) {
     if (!editor) return;
@@ -407,6 +449,19 @@ export function Editor({ rel, vaultPath }: EditorProps) {
     return () => document.removeEventListener('keydown', onKey, true);
   }, [editor, slashState.active, wikiState.active, filteredSlash, selectedSlashIdx]);
 
+  // Cmd+J / Ctrl+J to open InlineAI
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'j') {
+        e.preventDefault();
+        e.stopPropagation();
+        setInlineAIOpen((v) => !v);
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
+
   const file = files.get(rel);
   const title = file?.title ?? basenameNoExt(rel);
 
@@ -481,6 +536,11 @@ export function Editor({ rel, vaultPath }: EditorProps) {
           {editor && <TableBubbleMenu editor={editor} />}
         </div>
       </div>
+      <IntelligenceHints />
+
+      {editor && inlineAIOpen && (
+        <InlineAI editor={editor} onClose={() => setInlineAIOpen(false)} />
+      )}
 
       {editor && (
         <WikilinkAutocomplete

@@ -1,6 +1,6 @@
 import { api } from '@/lib/api';
 import { parseNote } from '@/lib/markdown';
-import { basenameNoExt, isExcalidrawPath, isMarkdownPath, isViewablePath, joinPath, stripMarkdownExt } from '@/lib/utils';
+import { basenameNoExt, isCodePath, isExcalidrawPath, isMarkdownPath, isViewablePath, joinPath, stripMarkdownExt } from '@/lib/utils';
 import type { FileTreeNode, VaultFile, ViewMode } from '@/types';
 import { create } from 'zustand';
 
@@ -223,13 +223,14 @@ export const useVault = create<VaultState>((set, get) => ({
 
   openFile(rel) {
     // Markdown + canvas go to their editors; images and PDFs open in the AttachmentViewer.
-    // Anything else (.pen, .base, …) stays click-no-op until a dedicated viewer exists.
+    // Code/text files open in the raw editor. Anything else stays click-no-op.
     const lower = rel.toLowerCase();
     if (
       !isMarkdownPath(lower) &&
       !lower.endsWith('.canvas') &&
       !isExcalidrawPath(lower) &&
-      !isViewablePath(lower)
+      !isViewablePath(lower) &&
+      !isCodePath(lower)
     )
       return;
     set((s) => {

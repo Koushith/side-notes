@@ -37,6 +37,13 @@ export function isExcalidrawPath(p: string): boolean {
   return EXCALIDRAW_EXT_RE.test(p);
 }
 
+/** Plain-text files that can be opened in the code/raw editor. */
+export const CODE_EXT_RE = /\.(json|html|txt|csv|ts|tsx|js|jsx|py|rs|go|rb|java|css|scss|yaml|yml|toml|xml|sh|zsh|sql|graphql|env|gitignore|dockerfile)$/i;
+
+export function isCodePath(p: string): boolean {
+  return CODE_EXT_RE.test(p);
+}
+
 export function stripMarkdownExt(p: string): string {
   return p.replace(MARKDOWN_EXT_RE, '');
 }

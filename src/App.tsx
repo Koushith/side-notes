@@ -13,7 +13,7 @@ import { RawEditor } from '@/components/RawEditor';
 import { CanvasView } from '@/components/CanvasView';
 import { ExcalidrawView } from '@/components/ExcalidrawView';
 import { AttachmentViewer } from '@/components/AttachmentViewer';
-import { isViewablePath as isViewable } from '@/lib/utils';
+import { isViewablePath as isViewable, isCodePath, isMarkdownPath } from '@/lib/utils';
 import { GraphView } from '@/components/GraphView';
 import { AllNotesView } from '@/components/AllNotesView';
 import { EmptyState } from '@/components/EmptyState';
@@ -205,6 +205,8 @@ export default function App() {
                   <ExcalidrawView key={activeFile} rel={activeFile} vaultPath={vaultPath} />
                 ) : isViewable(activeFile) ? (
                   <AttachmentViewer key={activeFile} rel={activeFile} vaultPath={vaultPath} />
+                ) : isCodePath(activeFile) ? (
+                  <RawEditor key={activeFile} rel={activeFile} vaultPath={vaultPath} />
                 ) : rawMode ? (
                   <RawEditor key={activeFile} rel={activeFile} vaultPath={vaultPath} />
                 ) : (

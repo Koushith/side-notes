@@ -36,12 +36,8 @@
   <key>com.apple.security.device.microphone</key>
   <true/>
 
-  <!-- Outbound networking — we don't need it, but Electron's networking
-       stack still initializes; leaving this off is safer and tells the
-       reviewer the app is fully offline. Re-enable if you ever add sync. -->
-  <!--
+  <!-- Outbound networking for AI providers, git push/pull, and spatial browser. -->
   <key>com.apple.security.network.client</key>
   <true/>
-  -->
 </dict>
 </plist>

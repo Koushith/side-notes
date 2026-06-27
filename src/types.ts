@@ -131,6 +131,8 @@ export interface ApiBridge {
     push: (vaultPath: string) => Promise<GitVoid>;
     pull: (vaultPath: string) => Promise<GitVoid>;
     fetch: (vaultPath: string) => Promise<GitVoid>;
+    diff: (vaultPath: string, filePath: string, staged: boolean) => Promise<GitResult<{ diff: string }>>;
+    log: (vaultPath: string, count: number) => Promise<GitResult<{ log: { hash: string; message: string; date: string; author: string }[] }>>;
   };
   ai: {
     getSettings: () => Promise<AISettingsView>;

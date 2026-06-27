@@ -28,6 +28,7 @@
     "@fontsource-variable/jetbrains-mono": "^5.2.8",
     "@tiptap/extension-bubble-menu": "^2.27.2",
     "@tiptap/extension-code-block-lowlight": "^2.27.2",
+    "@tiptap/extension-highlight": "^2.27.2",
     "@tiptap/extension-image": "^2.27.2",
     "@tiptap/extension-link": "^2.10.3",
     "@tiptap/extension-placeholder": "^2.10.3",
@@ -37,6 +38,7 @@
     "@tiptap/extension-table-row": "^2.27.2",
     "@tiptap/extension-task-item": "^2.10.3",
     "@tiptap/extension-task-list": "^2.10.3",
+    "@tiptap/extension-typography": "^2.27.2",
     "@tiptap/pm": "^2.10.3",
     "@tiptap/react": "^2.10.3",
     "@tiptap/starter-kit": "^2.10.3",
@@ -108,13 +110,6 @@
             "arm64",
             "x64"
           ]
-        },
-        {
-          "target": "mas",
-          "arch": [
-            "arm64",
-            "x64"
-          ]
         }
       ],
       "hardenedRuntime": true,
@@ -122,7 +117,9 @@
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
       "icon": "build/icon.icns",
-      "notarize": false,
+      "notarize": {
+          "teamId": "HSNXURXG94"
+        },
       "extendInfo": {
         "NSMicrophoneUsageDescription": "SideNotes uses the microphone to transcribe your speech into notes when you dictate."
       }

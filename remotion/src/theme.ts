@@ -19,9 +19,9 @@ export const COLORS = {
 };
 
 export const FONTS = {
-  // System fallbacks only — keeps Remotion's headless bundler from needing the same
-  // @fontsource installs as the app.
-  serif: '"Source Serif 4", "Iowan Old Style", Georgia, serif',
-  sans: '-apple-system, BlinkMacSystemFont, system-ui, "Inter", sans-serif',
-  mono: 'ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, monospace',
+  // Clean, modern system fonts — no serif, all sans for that crisp Granola-style aesthetic.
+  // Remotion uses system fallbacks to avoid bundler deps.
+  serif: '-apple-system, BlinkMacSystemFont, system-ui, "SF Pro Display", "Segoe UI", sans-serif',
+  sans: '-apple-system, BlinkMacSystemFont, system-ui, "SF Pro Text", "Segoe UI", sans-serif',
+  mono: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, monospace',
 };

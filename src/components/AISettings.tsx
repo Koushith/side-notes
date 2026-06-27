@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { RefreshCw, X, ChevronRight } from 'lucide-react';
 import { useAI } from '@/stores/ai';
+import { useNoteIntelligence, IntelligenceFeature } from '@/stores/noteIntelligence';
 import { useVoice, getVoiceHotkey, setVoiceHotkey, DEFAULT_HOTKEY } from '@/stores/voice';
 import { api } from '@/lib/api';
 import { silentWav } from '@/lib/recorder';
@@ -31,7 +32,7 @@ export function AISettings({ open, onClose }: Props) {
   const loadSettings = useAI((s) => s.loadSettings);
   const saveSettings = useAI((s) => s.saveSettings);
 
-  const [section, setSection] = useState<'assistant' | 'voice'>('assistant');
+  const [section, setSection] = useState<'assistant' | 'intelligence' | 'voice'>('assistant');
   const [provider, setProvider] = useState<AIProvider>('ollama');
   const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -205,67 +206,72 @@ export function AISettings({ open, onClose }: Props) {
       }}
     >
       <div
-        className="w-[560px] max-w-[94vw] max-h-[88vh] overflow-y-auto rounded-xl border border-border bg-bg-elevated shadow-2xl"
+        className="w-[580px] max-w-[94vw] max-h-[88vh] overflow-y-auto rounded-xl border border-border bg-bg-elevated shadow-2xl"
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-border-subtle">
-          <h2 className="font-serif text-[15px] font-semibold text-text">AI settings</h2>
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-border-subtle">
+          <div>
+            <h2 className="text-[17px] font-semibold text-text">AI Settings</h2>
+            <p className="text-[12px] text-text-muted mt-0.5">Configure your writing assistant and voice dictation</p>
+          </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-md text-text-muted hover:text-text hover:bg-bg-hover"
+            className="p-1.5 rounded-lg text-text-muted hover:text-text hover:bg-bg-hover transition-colors"
           >
-            <X size={14} />
+            <X size={16} />
           </button>
         </div>
 
-        {/* Section tabs: text assistant vs voice dictation */}
-        <div className="flex gap-4 px-5 pt-3 border-b border-border-subtle">
-          {(['assistant', 'voice'] as const).map((sec) => (
+        {/* Section tabs */}
+        <div className="flex gap-1 px-6 pt-4 pb-3">
+          {(['assistant', 'intelligence', 'voice'] as const).map((sec) => (
             <button
               key={sec}
               onClick={() => setSection(sec)}
               className={cn(
-                'pb-2 text-[12.5px] border-b-2 -mb-px transition-colors',
+                'px-4 py-2 text-[13px] rounded-lg transition-all',
                 section === sec
-                  ? 'border-accent text-text font-medium'
-                  : 'border-transparent text-text-muted hover:text-text'
+                  ? 'bg-bg-hover text-text font-medium'
+                  : 'text-text-muted hover:text-text hover:bg-bg-hover/50'
               )}
             >
-              {sec === 'assistant' ? 'Assistant' : 'Voice'}
+              {sec === 'assistant' ? 'Provider' : sec === 'intelligence' ? 'Intelligence' : 'Voice'}
             </button>
           ))}
         </div>
 
         {section === 'voice' ? (
           <VoiceSection onClose={onClose} />
+        ) : section === 'intelligence' ? (
+          <IntelligenceSection />
         ) : (
         <>
-        {/* Provider tabs */}
-        <div className="px-5 pt-4 pb-2">
-          <div className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-text-subtle mb-2">
-            Provider
-          </div>
-          <div className="flex gap-1 p-1 rounded-md bg-bg border border-border">
+        {/* Provider selection */}
+        <div className="px-6 pt-2 pb-3">
+          <div className="grid grid-cols-4 gap-2">
             {(['ollama', 'openai', 'anthropic', 'bedrock'] as AIProvider[]).map((p) => (
               <button
                 key={p}
                 onClick={() => setProvider(p)}
                 className={cn(
-                  'flex-1 px-3 py-1.5 rounded text-[12.5px] transition-colors',
+                  'flex flex-col items-center gap-1.5 px-3 py-3 rounded-lg border text-[12px] transition-all',
                   provider === p
-                    ? 'bg-bg-elevated text-text font-medium shadow-sm'
-                    : 'text-text-muted hover:text-text'
+                    ? 'bg-accent-subtle border-accent text-text font-medium'
+                    : 'bg-bg border-border text-text-muted hover:border-border hover:bg-bg-hover'
                 )}
               >
-                {PROVIDER_LABEL[p]}
+                <span className="text-[13px] font-medium">{PROVIDER_LABEL[p]}</span>
+                <span className="text-[10px] text-text-subtle">
+                  {p === 'ollama' ? 'Local' : p === 'openai' ? 'Cloud' : p === 'anthropic' ? 'Cloud' : 'AWS'}
+                </span>
               </button>
             ))}
           </div>
-          <p className="mt-2 text-[11.5px] text-text-subtle leading-snug">{PROVIDER_HINT[provider]}</p>
+          <p className="mt-3 text-[11.5px] text-text-muted leading-relaxed">{PROVIDER_HINT[provider]}</p>
         </div>
 
         {/* Provider-specific fields */}
-        <div className="px-5 py-4 space-y-4 border-t border-border-subtle">
+        <div className="px-6 py-4 space-y-4 border-t border-border-subtle">
           {provider === 'ollama' && (
             <>
               <Field label="Base URL">
@@ -436,34 +442,35 @@ export function AISettings({ open, onClose }: Props) {
         </div>
 
         {saveError && (
-          <div className="px-5 pb-2 text-[12px] text-red-500">{saveError}</div>
+          <div className="mx-6 mb-3 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-[12px] text-red-500">{saveError}</div>
         )}
 
-        <div className="flex items-center gap-2 px-5 py-3 border-t border-border-subtle">
+        {testResult && (
+          <div className={cn('mx-6 mb-3 px-3 py-2 rounded-lg border text-[12px]', testResult.ok ? 'bg-tag-soft border-tag/20 text-tag' : 'bg-red-500/10 border-red-500/20 text-red-500')}>
+            {testResult.ok ? '✓ ' : '✕ '}
+            {testResult.msg}
+          </div>
+        )}
+
+        <div className="flex items-center gap-2 px-6 py-4 border-t border-border-subtle">
           <button
             onClick={onTest}
             disabled={testing || saving}
-            className="px-3 py-1.5 text-[12.5px] rounded-md border border-border text-text-muted hover:text-text hover:bg-bg-hover transition-colors disabled:opacity-50"
+            className="px-4 py-2 text-[12.5px] font-medium rounded-lg border border-border text-text hover:bg-bg-hover transition-colors disabled:opacity-50"
           >
             {testing ? 'Testing…' : 'Test connection'}
           </button>
-          {testResult && (
-            <span className={cn('text-[11.5px] truncate', testResult.ok ? 'text-emerald-500' : 'text-red-500')}>
-              {testResult.ok ? '✓ ' : '✕ '}
-              {testResult.msg}
-            </span>
-          )}
           <div className="flex-1" />
           <button
             onClick={onClose}
-            className="px-3 py-1.5 text-[12.5px] rounded-md text-text-muted hover:text-text hover:bg-bg-hover transition-colors"
+            className="px-4 py-2 text-[12.5px] rounded-lg text-text-muted hover:text-text hover:bg-bg-hover transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={onSave}
             disabled={saving}
-            className="px-4 py-1.5 text-[12.5px] font-medium rounded-md bg-accent text-bg hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-5 py-2 text-[12.5px] font-semibold rounded-lg bg-accent text-bg hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {saving ? 'Saving…' : 'Save'}
           </button>
@@ -496,7 +503,7 @@ function probeAssistant(): Promise<{ ok: boolean; msg: string }> {
 }
 
 const inputClass =
-  'w-full px-2.5 py-2 text-[12.5px] rounded-md bg-bg border border-border outline-none focus:border-accent focus:ring-1 focus:ring-accent/30';
+  'w-full px-3.5 py-2.5 text-[13px] rounded-lg bg-bg border border-border outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 transition-all';
 
 function Advanced({
   open,
@@ -525,7 +532,7 @@ function Advanced({
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <div className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-text-subtle mb-1.5">
+      <div className="text-[12px] font-medium text-text-muted mb-2">
         {label}
       </div>
       {children}
@@ -829,6 +836,72 @@ function KeyInput({
         <p className="text-[10.5px] text-text-subtle leading-snug">
           Stored encrypted on disk via your OS keychain. Never sent anywhere except the configured endpoint.
         </p>
+      )}
+    </div>
+  );
+}
+
+const FEATURE_LABELS: Record<IntelligenceFeature, { name: string; desc: string }> = {
+  autoTag: { name: 'Auto-tag', desc: 'Suggest tags based on note content' },
+  smartTitle: { name: 'Smart title', desc: 'Suggest a title for untitled notes' },
+  extractTodos: { name: 'Extract action items', desc: 'Detect todos in meeting notes and lists' },
+  linkSuggestions: { name: 'Link suggestions', desc: 'Surface related notes in your vault' },
+  continueWriting: { name: 'Continue writing', desc: 'Suggest a continuation when you pause' },
+};
+
+function IntelligenceSection() {
+  const enabled = useNoteIntelligence((s) => s.enabled);
+  const setEnabled = useNoteIntelligence((s) => s.setEnabled);
+  const features = useNoteIntelligence((s) => s.features);
+  const setFeature = useNoteIntelligence((s) => s.setFeature);
+
+  return (
+    <div className="px-6 py-5 space-y-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="text-[14px] font-medium text-text">Background Intelligence</div>
+          <div className="text-[12px] text-text-muted mt-0.5">
+            Your notes app learns from what you write and surfaces useful context.
+          </div>
+        </div>
+        <label className="relative inline-flex items-center cursor-pointer">
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(e) => setEnabled(e.target.checked)}
+            className="sr-only peer"
+          />
+          <div className="w-9 h-5 bg-bg-hover peer-focus:ring-2 peer-focus:ring-accent/30 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-text-subtle after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-accent peer-checked:after:bg-bg" />
+        </label>
+      </div>
+
+      {enabled && (
+        <div className="space-y-3 pt-2 border-t border-border-subtle">
+          {(Object.keys(FEATURE_LABELS) as IntelligenceFeature[]).map((key) => (
+            <label key={key} className="flex items-start gap-3 cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={features[key]}
+                onChange={(e) => setFeature(key, e.target.checked)}
+                className="mt-0.5 accent-accent"
+              />
+              <div>
+                <div className="text-[13px] text-text font-medium group-hover:text-accent transition-colors">
+                  {FEATURE_LABELS[key].name}
+                </div>
+                <div className="text-[11.5px] text-text-muted leading-snug">
+                  {FEATURE_LABELS[key].desc}
+                </div>
+              </div>
+            </label>
+          ))}
+        </div>
+      )}
+
+      {!enabled && (
+        <div className="bg-bg rounded-lg border border-border p-4 text-[12px] text-text-muted leading-relaxed">
+          When enabled, the intelligence layer watches your notes as you write and quietly surfaces suggestions: tags, titles, related notes, action items, and writing continuations. All processing goes through your configured AI provider. Nothing is stored externally.
+        </div>
       )}
     </div>
   );

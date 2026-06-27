@@ -125,6 +125,10 @@ const api = {
       ipcRenderer.invoke('git:pull', vaultPath) as Promise<GitVoid>,
     fetch: (vaultPath: string) =>
       ipcRenderer.invoke('git:fetch', vaultPath) as Promise<GitVoid>,
+    diff: (vaultPath: string, filePath: string, staged: boolean) =>
+      ipcRenderer.invoke('git:diff', vaultPath, filePath, staged) as Promise<GitResult<{ diff: string }>>,
+    log: (vaultPath: string, count: number) =>
+      ipcRenderer.invoke('git:log', vaultPath, count) as Promise<GitResult<{ log: { hash: string; message: string; date: string; author: string }[] }>>,
   },
   ai: {
     getSettings: () => ipcRenderer.invoke('ai:settings:get') as Promise<AISettingsView>,

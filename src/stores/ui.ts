@@ -7,12 +7,16 @@ interface UiState {
   rawMode: boolean;
   setRawMode: (v: boolean) => void;
   toggleRawMode: () => void;
+  sidebarCollapsed: boolean;
+  setSidebarCollapsed: (v: boolean) => void;
+  toggleSidebar: () => void;
   aiSettingsOpen: boolean;
   setAiSettingsOpen: (v: boolean) => void;
 }
 
 const FOCUS_KEY = 'second-brain.focusMode';
 const RAW_KEY = 'second-brain.rawMode';
+const SIDEBAR_KEY = 'second-brain.sidebarCollapsed';
 
 function readBool(key: string): boolean {
   try {
@@ -50,6 +54,16 @@ export const useUi = create<UiState>((set, get) => ({
     const next = !get().rawMode;
     persistBool(RAW_KEY, next);
     set({ rawMode: next });
+  },
+  sidebarCollapsed: readBool(SIDEBAR_KEY),
+  setSidebarCollapsed: (sidebarCollapsed) => {
+    persistBool(SIDEBAR_KEY, sidebarCollapsed);
+    set({ sidebarCollapsed });
+  },
+  toggleSidebar: () => {
+    const next = !get().sidebarCollapsed;
+    persistBool(SIDEBAR_KEY, next);
+    set({ sidebarCollapsed: next });
   },
   aiSettingsOpen: false,
   setAiSettingsOpen: (aiSettingsOpen) => set({ aiSettingsOpen }),

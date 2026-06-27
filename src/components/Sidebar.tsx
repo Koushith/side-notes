@@ -6,6 +6,7 @@ import {
   Plus,
   Search,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   ChevronsUpDown,
   FilePlus,
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useVault } from '@/stores/vault';
 import { useGit } from '@/stores/git';
+import { useUi } from '@/stores/ui';
 import { FileTree } from './FileTree';
 import { TagPanel } from './TagPanel';
 import { cn } from '@/lib/utils';
@@ -39,6 +41,8 @@ export function Sidebar({ onOpenPalette, onOpenVaultSwitcher }: Props) {
   const setPinnedOnly = useVault((s) => s.setPinnedOnly);
   const setSearch = useVault((s) => s.setSearch);
   const setSelectedTag = useVault((s) => s.setSelectedTag);
+  const collapsed = useUi((s) => s.sidebarCollapsed);
+  const toggleSidebar = useUi((s) => s.toggleSidebar);
 
   const [tagsOpen, setTagsOpen] = useState(true);
   const gitChangeCount = useGit((s) => s.files.length);
@@ -74,29 +78,52 @@ export function Sidebar({ onOpenPalette, onOpenVaultSwitcher }: Props) {
     ? 'today'
     : null;
 
+  if (collapsed) {
+    return (
+      <aside className="sidebar w-10 shrink-0 flex flex-col items-center border-r border-border bg-bg pt-[18px]">
+        <button
+          onClick={toggleSidebar}
+          title="Expand sidebar"
+          className="w-7 h-7 rounded-md bg-bg-hover text-text-muted hover:text-text hover:bg-bg-active grid place-items-center transition-colors"
+        >
+          <ChevronRight size={14} />
+        </button>
+      </aside>
+    );
+  }
+
   return (
-    <aside className="sidebar w-60 shrink-0 flex flex-col border-r border-border bg-bg-elevated overflow-hidden">
-      {/* Vault header — click to switch vault */}
-      <button
-        onClick={onOpenVaultSwitcher}
-        title="Switch vault"
-        className="flex items-center gap-2.5 px-4 pt-[18px] pb-3.5 border-b border-border-subtle w-full hover:bg-bg-hover transition-colors group"
-      >
-        <span className="w-[22px] h-[22px] rounded-md bg-text text-bg grid place-items-center font-serif font-semibold italic text-[13px] shrink-0">
-          S
-        </span>
-        <span className="font-serif text-[16px] font-semibold tracking-tight text-text truncate text-left">
-          {vaultName}
-        </span>
-        <span className="font-mono text-[9.5px] text-text-subtle shrink-0 mt-[3px]">v{__APP_VERSION__}</span>
-        <span className="flex-1" />
-        <ChevronsUpDown size={13} className="text-text-subtle shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-      </button>
+    <aside className="sidebar w-60 shrink-0 flex flex-col border-r border-border bg-bg overflow-hidden">
+      {/* Vault header */}
+      <div className="flex items-center border-b border-border-subtle">
+        <button
+          onClick={onOpenVaultSwitcher}
+          title="Switch vault"
+          className="flex-1 flex items-center gap-2.5 px-4 pt-[18px] pb-3.5 hover:bg-bg-hover transition-colors group min-w-0"
+        >
+          <span className="w-[22px] h-[22px] rounded-md bg-text text-bg grid place-items-center font-semibold text-[13px] shrink-0">
+            S
+          </span>
+          <span className="text-[15px] font-semibold tracking-tight text-text truncate text-left">
+            {vaultName}
+          </span>
+          <span className="font-mono text-[9.5px] text-text-subtle shrink-0 mt-[3px]">v{__APP_VERSION__}</span>
+          <span className="flex-1" />
+          <ChevronsUpDown size={13} className="text-text-subtle shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+        </button>
+        <button
+          onClick={toggleSidebar}
+          title="Collapse sidebar"
+          className="p-1.5 mr-2 rounded-md text-text-subtle hover:text-text hover:bg-bg-hover transition-colors shrink-0"
+        >
+          <ChevronLeft size={14} />
+        </button>
+      </div>
 
       {/* Search */}
       <button
         onClick={onOpenPalette}
-        className="mx-3 mt-3 mb-1 px-2.5 py-[7px] bg-bg border border-border rounded-md flex items-center gap-2 text-text-muted text-[12px] hover:border-accent/40 transition-colors"
+        className="mx-3 mt-3 mb-1 px-2.5 py-[7px] bg-bg-elevated border border-border rounded-md flex items-center gap-2 text-text-muted text-[12px] hover:border-accent/40 transition-colors"
       >
         <Search size={13} />
         <span className="flex-1 text-left">Search or jump to…</span>
@@ -233,7 +260,7 @@ function NavItem({
     <button
       onClick={onClick}
       className={cn(
-        'press nav-indicator w-full flex items-center gap-2.5 px-2.5 py-[6px] rounded-md text-[12.5px]',
+        'press nav-indicator w-full flex items-center gap-2.5 px-2.5 py-[6px] rounded-md text-[12.5px] transition-colors',
         active
           ? 'bg-bg-hover text-text font-medium'
           : 'text-text-muted hover:bg-bg-hover hover:text-text'

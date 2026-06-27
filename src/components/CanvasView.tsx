@@ -2,8 +2,6 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import {
   ReactFlow,
   Background,
-  Controls,
-  MiniMap,
   applyNodeChanges,
   applyEdgeChanges,
   addEdge,
@@ -21,55 +19,28 @@ import {
   NodeResizer,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { useVault } from '@/stores/vault';
 import { api } from '@/lib/api';
-import { joinPath, basenameNoExt } from '@/lib/utils';
+import { joinPath, cn } from '@/lib/utils';
 import {
-  FileText,
-  StickyNote,
-  Type,
-  Trash2,
-  MousePointer2,
-  ArrowRight,
-  PencilLine,
+  StickyNote, Trash2, Globe, X, Plus, Search, Pause, Minus,
+  ZoomIn, ChevronRight, ChevronDown, Layers, ExternalLink,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+
+// ─── Canvas file format ──────────────────────────────────────────────────────
 
 interface CanvasFile {
   version: 1;
   nodes: CanvasNode[];
   edges: CanvasEdge[];
 }
+
 type StickyColor = 'yellow' | 'pink' | 'blue';
+type WebColor = 'none' | 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple';
+
 type CanvasNode =
-  | {
-      id: string;
-      type: 'text';
-      x: number;
-      y: number;
-      width: number;
-      height: number;
-      text: string;
-    }
-  | {
-      id: string;
-      type: 'sticky';
-      x: number;
-      y: number;
-      width: number;
-      height: number;
-      text: string;
-      color: StickyColor;
-    }
-  | {
-      id: string;
-      type: 'file';
-      x: number;
-      y: number;
-      width: number;
-      height: number;
-      file: string; // rel
-    };
+  | { id: string; type: 'sticky'; x: number; y: number; width: number; height: number; text: string; color: StickyColor }
+  | { id: string; type: 'web'; x: number; y: number; width: number; height: number; url: string; color?: WebColor };
+
 interface CanvasEdge {
   id: string;
   fromNode: string;
@@ -81,624 +52,523 @@ interface CanvasEdge {
 
 const EMPTY: CanvasFile = { version: 1, nodes: [], edges: [] };
 
+// ─── Handlers context ────────────────────────────────────────────────────────
+
 interface CanvasHandlers {
   updateNodeData: (id: string, patch: Record<string, unknown>) => void;
   removeNode: (id: string) => void;
+  spawnChildWeb: (parentId: string, url: string) => void;
+  focusNode: (id: string) => void;
 }
 
-/** A stable container; we mutate `.current` as needed so node renderers keep a constant
- *  reference and we never trigger React Flow's "new nodeTypes object" warning. */
-const CanvasHandlersContext = createContext<{ ref: { current: CanvasHandlers } } | null>(null);
+const HandlersCtx = createContext<{ ref: { current: CanvasHandlers } } | null>(null);
 
-function useCanvasHandlers(): CanvasHandlers {
-  const ctx = useContext(CanvasHandlersContext);
-  if (!ctx) throw new Error('CanvasHandlersContext missing');
+function useHandlers(): CanvasHandlers {
+  const ctx = useContext(HandlersCtx);
+  if (!ctx) throw new Error('HandlersCtx missing');
   return ctx.ref.current;
 }
 
-function TextCardNode(p: NodeProps) {
-  const { updateNodeData, removeNode } = useCanvasHandlers();
-  return (
-    <TextCard
-      {...p}
-      onChange={(text) => updateNodeData(p.id, { text })}
-      onRemove={() => removeNode(p.id)}
-    />
-  );
-}
+// ─── Node type wrappers ──────────────────────────────────────────────────────
 
 function StickyCardNode(p: NodeProps) {
-  const { updateNodeData, removeNode } = useCanvasHandlers();
+  const { updateNodeData, removeNode } = useHandlers();
+  return <StickyCard {...p} onChange={(t) => updateNodeData(p.id, { text: t })} onColor={(c) => updateNodeData(p.id, { color: c })} onRemove={() => removeNode(p.id)} />;
+}
+
+function WebCardNode(p: NodeProps) {
+  const { updateNodeData, removeNode, spawnChildWeb } = useHandlers();
   return (
-    <StickyCard
+    <WebPageCard
       {...p}
-      onChange={(text) => updateNodeData(p.id, { text })}
-      onColor={(color) => updateNodeData(p.id, { color })}
+      onNavigate={(u) => updateNodeData(p.id, { url: u })}
       onRemove={() => removeNode(p.id)}
+      onLinkClick={(url) => spawnChildWeb(p.id, url)}
+      onColorChange={(c) => updateNodeData(p.id, { color: c })}
     />
   );
 }
 
-function FileCardNode(p: NodeProps) {
-  const { removeNode } = useCanvasHandlers();
-  return <FileCard {...p} onRemove={() => removeNode(p.id)} />;
-}
+const NODE_TYPES = { stickyCard: StickyCardNode, webCard: WebCardNode } as const;
 
-const CANVAS_NODE_TYPES = {
-  textCard: TextCardNode,
-  stickyCard: StickyCardNode,
-  fileCard: FileCardNode,
-} as const;
+const EDGE_STYLE = { stroke: 'rgb(var(--c-accent))', strokeWidth: 1.5 };
 
-interface Props {
-  rel: string;
-  vaultPath: string;
-}
+// ─── Color constants ─────────────────────────────────────────────────────────
+
+const WEB_COLORS: { value: WebColor; label: string; cls: string }[] = [
+  { value: 'none', label: 'None', cls: 'bg-transparent border-border' },
+  { value: 'red', label: 'Red', cls: 'bg-red-500' },
+  { value: 'orange', label: 'Orange', cls: 'bg-orange-500' },
+  { value: 'yellow', label: 'Yellow', cls: 'bg-yellow-500' },
+  { value: 'green', label: 'Green', cls: 'bg-green-500' },
+  { value: 'blue', label: 'Blue', cls: 'bg-blue-500' },
+  { value: 'purple', label: 'Purple', cls: 'bg-purple-500' },
+];
+
+const WEB_BORDER_COLORS: Record<WebColor, string> = {
+  none: 'border-border',
+  red: 'border-red-500',
+  orange: 'border-orange-500',
+  yellow: 'border-yellow-500',
+  green: 'border-green-500',
+  blue: 'border-blue-500',
+  purple: 'border-purple-500',
+};
+
+// ─── Public component ────────────────────────────────────────────────────────
+
+interface Props { rel: string; vaultPath: string }
 
 export function CanvasView(props: Props) {
-  return (
-    <ReactFlowProvider>
-      <CanvasInner {...props} />
-    </ReactFlowProvider>
-  );
+  return <ReactFlowProvider><CanvasInner {...props} /></ReactFlowProvider>;
 }
+
+// ─── Canvas inner ────────────────────────────────────────────────────────────
 
 function CanvasInner({ rel, vaultPath }: Props) {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [layersPanelOpen, setLayersPanelOpen] = useState(true);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [urlInputOpen, setUrlInputOpen] = useState(false);
+  const [paused, setPaused] = useState(false);
   const saveTimer = useRef<number | null>(null);
   const flow = useReactFlow();
+  const nodesRef = useRef<Node[]>(nodes);
+  const edgesRef = useRef<Edge[]>(edges);
+  nodesRef.current = nodes;
+  edgesRef.current = edges;
 
   // Load canvas file
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const full = joinPath(vaultPath, rel);
-        const raw = await api.files.read(full);
+        const raw = await api.files.read(joinPath(vaultPath, rel));
         const data: CanvasFile = raw.trim() ? JSON.parse(raw) : EMPTY;
         if (cancelled) return;
         setNodes(canvasNodesToFlow(data.nodes));
         setEdges(canvasEdgesToFlow(data.edges));
         setLoaded(true);
-        // Center the view after load
         setTimeout(() => flow.fitView({ padding: 0.3, duration: 300 }), 50);
       } catch (err) {
         console.error('Failed to load canvas', err);
         setLoaded(true);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [rel, vaultPath, flow]);
 
-  // Debounced save
-  const queueSave = useCallback(
-    (n: Node[], e: Edge[]) => {
-      if (saveTimer.current) window.clearTimeout(saveTimer.current);
-      saveTimer.current = window.setTimeout(async () => {
-        const data: CanvasFile = {
-          version: 1,
-          nodes: flowNodesToCanvas(n),
-          edges: flowEdgesToCanvas(e),
-        };
-        try {
-          await api.files.write(joinPath(vaultPath, rel), JSON.stringify(data, null, 2));
-        } catch (err) {
-          console.error('Failed to save canvas', err);
-        }
-      }, 350);
-    },
-    [vaultPath, rel]
-  );
+  const queueSave = useCallback((n: Node[], e: Edge[]) => {
+    if (saveTimer.current) window.clearTimeout(saveTimer.current);
+    saveTimer.current = window.setTimeout(async () => {
+      const data: CanvasFile = { version: 1, nodes: flowNodesToCanvas(n), edges: flowEdgesToCanvas(e) };
+      try { await api.files.write(joinPath(vaultPath, rel), JSON.stringify(data, null, 2)); }
+      catch (err) { console.error('Failed to save canvas', err); }
+    }, 350);
+  }, [vaultPath, rel]);
 
-  const onNodesChange = useCallback(
-    (changes: NodeChange[]) => {
-      setNodes((cur) => {
-        const next = applyNodeChanges(changes, cur);
-        if (loaded) queueSave(next, edges);
-        return next;
-      });
-    },
-    [edges, loaded, queueSave]
-  );
+  const onNodesChange = useCallback((changes: NodeChange[]) => {
+    setNodes((cur) => { const next = applyNodeChanges(changes, cur); if (loaded) queueSave(next, edgesRef.current); return next; });
+  }, [loaded, queueSave]);
 
-  const onEdgesChange = useCallback(
-    (changes: EdgeChange[]) => {
-      setEdges((cur) => {
-        const next = applyEdgeChanges(changes, cur);
-        if (loaded) queueSave(nodes, next);
-        return next;
-      });
-    },
-    [nodes, loaded, queueSave]
-  );
+  const onEdgesChange = useCallback((changes: EdgeChange[]) => {
+    setEdges((cur) => { const next = applyEdgeChanges(changes, cur); if (loaded) queueSave(nodesRef.current, next); return next; });
+  }, [loaded, queueSave]);
 
-  const onConnect = useCallback(
-    (conn: Connection) => {
-      setEdges((cur) => {
-        const next = addEdge(
-          {
-            ...conn,
-            type: 'smoothstep',
-            animated: false,
-            style: { stroke: 'rgb(var(--c-accent))', strokeWidth: 1.5 },
-          },
-          cur
-        );
-        if (loaded) queueSave(nodes, next);
-        return next;
-      });
-    },
-    [nodes, loaded, queueSave]
-  );
+  const onConnect = useCallback((conn: Connection) => {
+    setEdges((cur) => {
+      const next = addEdge({ ...conn, type: 'smoothstep', animated: false, style: EDGE_STYLE }, cur);
+      if (loaded) queueSave(nodesRef.current, next);
+      return next;
+    });
+  }, [loaded, queueSave]);
 
-  const updateNodeData = useCallback(
-    (id: string, patch: Record<string, unknown>) => {
-      setNodes((cur) => {
-        const next = cur.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...patch } } : n));
-        queueSave(next, edges);
-        return next;
-      });
-    },
-    [edges, queueSave]
-  );
+  const updateNodeData = useCallback((id: string, patch: Record<string, unknown>) => {
+    setNodes((cur) => {
+      const next = cur.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...patch } } : n));
+      queueSave(next, edgesRef.current);
+      return next;
+    });
+  }, [queueSave]);
 
-  const removeNode = useCallback(
-    (id: string) => {
-      setNodes((cur) => {
-        const next = cur.filter((n) => n.id !== id);
-        setEdges((curEdges) => {
-          const newEdges = curEdges.filter((e) => e.source !== id && e.target !== id);
-          queueSave(next, newEdges);
-          return newEdges;
-        });
-        return next;
-      });
-    },
-    [queueSave]
-  );
+  const removeNode = useCallback((id: string) => {
+    setNodes((cur) => {
+      const next = cur.filter((n) => n.id !== id);
+      setEdges((ce) => { const ne = ce.filter((e) => e.source !== id && e.target !== id); queueSave(next, ne); return ne; });
+      return next;
+    });
+  }, [queueSave]);
+
+  const focusNode = useCallback((id: string) => {
+    const node = nodesRef.current.find((n) => n.id === id);
+    if (!node) return;
+    const w = (node.style?.width as number) ?? 560;
+    const h = (node.style?.height as number) ?? 400;
+    flow.setCenter(node.position.x + w / 2, node.position.y + h / 2, { zoom: 0.8, duration: 400 });
+  }, [flow]);
+
+  const spawnChildWeb = useCallback((parentId: string, url: string) => {
+    const parent = nodesRef.current.find((n) => n.id === parentId);
+    if (!parent) return;
+    const pw = (parent.style?.width as number) ?? 560;
+    const id = `n_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const newX = parent.position.x + pw + 80;
+    const newY = parent.position.y + 40;
+    const node: Node = {
+      id, type: 'webCard',
+      position: { x: newX, y: newY },
+      data: { url: normalizeUrl(url), color: 'none', paused },
+      style: { width: 560, height: 400 },
+    };
+    const edge: Edge = {
+      id: `e_${parentId}_${id}`,
+      source: parentId, target: id,
+      sourceHandle: 'right', targetHandle: 'left',
+      type: 'smoothstep', style: EDGE_STYLE,
+    };
+    setNodes((cur) => { const next = [...cur, node]; setEdges((ce) => { const ne = [...ce, edge]; queueSave(next, ne); return ne; }); return next; });
+  }, [queueSave, paused]);
+
+  const addWebNode = useCallback((url?: string) => {
+    const { x, y, zoom } = flow.getViewport();
+    const px = (window.innerWidth / 2 - x) / zoom;
+    const py = (window.innerHeight / 2 - y) / zoom;
+    const id = `n_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const node: Node = {
+      id, type: 'webCard',
+      position: { x: px - 280, y: py - 200 },
+      data: { url: normalizeUrl(url || ''), color: 'none', paused },
+      style: { width: 560, height: 400 },
+    };
+    setNodes((cur) => { const next = [...cur, node]; queueSave(next, edgesRef.current); return next; });
+  }, [flow, queueSave, paused]);
 
   const stickyCycleRef = useRef(0);
+  const addSticky = useCallback(() => {
+    const { x, y, zoom } = flow.getViewport();
+    const px = (window.innerWidth / 2 - x) / zoom;
+    const py = (window.innerHeight / 2 - y) / zoom;
+    const id = `n_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const colors: StickyColor[] = ['yellow', 'pink', 'blue'];
+    const color = colors[stickyCycleRef.current++ % 3];
+    const node: Node = {
+      id, type: 'stickyCard',
+      position: { x: px - 110, y: py - 75 },
+      data: { text: '', color },
+      style: { width: 220, height: 150 },
+    };
+    setNodes((cur) => { const next = [...cur, node]; queueSave(next, edgesRef.current); return next; });
+  }, [flow, queueSave]);
 
-  const addCard = useCallback(
-    (kind: 'text' | 'file' | 'sticky', file?: string) => {
-      // Place near the center of the current viewport
-      const { x, y, zoom } = flow.getViewport();
-      const w = window.innerWidth / 2;
-      const h = window.innerHeight / 2;
-      const px = (w - x) / zoom;
-      const py = (h - y) / zoom;
-      const id = `n_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-      let node: Node;
-      if (kind === 'text') {
-        node = {
-          id,
-          type: 'textCard',
-          position: { x: px - 120, y: py - 60 },
-          data: { text: '' },
-          style: { width: 240, height: 120 },
-        };
-      } else if (kind === 'sticky') {
-        const colors: StickyColor[] = ['yellow', 'pink', 'blue'];
-        const color = colors[stickyCycleRef.current % colors.length];
-        stickyCycleRef.current += 1;
-        node = {
-          id,
-          type: 'stickyCard',
-          position: { x: px - 110, y: py - 75 },
-          data: { text: '', color },
-          style: { width: 220, height: 150 },
-        };
-      } else {
-        node = {
-          id,
-          type: 'fileCard',
-          position: { x: px - 140, y: py - 70 },
-          data: { file },
-          style: { width: 280, height: 140 },
-        };
+  const clearAll = useCallback(() => {
+    if (!window.confirm('Remove all nodes and edges from this canvas?')) return;
+    setNodes([]);
+    setEdges([]);
+    queueSave([], []);
+  }, [queueSave]);
+
+  const duplicateSelected = useCallback(() => {
+    const selected = nodesRef.current.filter((n) => n.selected);
+    if (selected.length === 0) return;
+    const newNodes: Node[] = selected.map((n) => ({
+      ...n,
+      id: `n_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      position: { x: n.position.x + 40, y: n.position.y + 40 },
+      selected: false,
+    }));
+    setNodes((cur) => { const next = [...cur, ...newNodes]; queueSave(next, edgesRef.current); return next; });
+  }, [queueSave]);
+
+  const deleteSelected = useCallback(() => {
+    const selectedIds = new Set(nodesRef.current.filter((n) => n.selected).map((n) => n.id));
+    if (selectedIds.size === 0) return;
+    setNodes((cur) => {
+      const next = cur.filter((n) => !selectedIds.has(n.id));
+      setEdges((ce) => { const ne = ce.filter((e) => !selectedIds.has(e.source) && !selectedIds.has(e.target)); queueSave(next, ne); return ne; });
+      return next;
+    });
+  }, [queueSave]);
+
+  const togglePause = useCallback(() => {
+    setPaused((p) => {
+      const next = !p;
+      setNodes((cur) => cur.map((n) => n.type === 'webCard' ? { ...n, data: { ...n.data, paused: next } } : n));
+      return next;
+    });
+  }, []);
+
+  const zoomIn = useCallback(() => flow.zoomIn({ duration: 200 }), [flow]);
+  const zoomOut = useCallback(() => flow.zoomOut({ duration: 200 }), [flow]);
+  const [zoomLevel, setZoomLevel] = useState(100);
+
+  useEffect(() => {
+    const onMove = () => { setZoomLevel(Math.round(flow.getZoom() * 100)); };
+    // Subscribe to viewport changes via the flow instance
+    const interval = setInterval(onMove, 500);
+    return () => clearInterval(interval);
+  }, [flow]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const meta = e.metaKey || e.ctrlKey;
+      if (meta && e.key === 'k') { e.preventDefault(); setUrlInputOpen(true); }
+      if (meta && e.key === 'f') { e.preventDefault(); setSearchOpen((v) => !v); }
+      if (meta && e.key === 'd') { e.preventDefault(); duplicateSelected(); }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !meta && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) {
+        deleteSelected();
       }
-      setNodes((cur) => {
-        const next = [...cur, node];
-        queueSave(next, edges);
-        return next;
-      });
-    },
-    [flow, edges, queueSave]
-  );
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [duplicateSelected, deleteSelected]);
 
-  const handlersRef = useRef<CanvasHandlers>({ updateNodeData, removeNode });
-  handlersRef.current = { updateNodeData, removeNode };
+  const handlersRef = useRef<CanvasHandlers>({ updateNodeData, removeNode, spawnChildWeb, focusNode });
+  handlersRef.current = { updateNodeData, removeNode, spawnChildWeb, focusNode };
   const handlersCtx = useMemo(() => ({ ref: handlersRef }), []);
 
-  // Drag-drop a note from the file tree
-  const onDrop = useCallback(
-    (e: React.DragEvent) => {
-      const fileRel = e.dataTransfer.getData('text/x-rel');
-      if (!fileRel) return;
-      e.preventDefault();
-      const bounds = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-      const point = flow.screenToFlowPosition({
-        x: e.clientX - bounds.left,
-        y: e.clientY - bounds.top,
-      });
-      const id = `n_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-      const node: Node = {
-        id,
-        type: 'fileCard',
-        position: { x: point.x - 140, y: point.y - 70 },
-        data: { file: fileRel },
-        style: { width: 280, height: 140 },
-      };
-      setNodes((cur) => {
-        const next = [...cur, node];
-        queueSave(next, edges);
-        return next;
-      });
-    },
-    [flow, edges, queueSave]
-  );
+  // Build tree data for layers panel
+  const layersTree = useMemo(() => {
+    const webNodes = nodes.filter((n) => n.type === 'webCard');
+    const childIds = new Set(edges.filter((e) => webNodes.some((n) => n.id === e.target)).map((e) => e.target));
+    const roots = webNodes.filter((n) => !childIds.has(n.id));
+    const childrenOf = (parentId: string): Node[] => {
+      const childEdges = edges.filter((e) => e.source === parentId);
+      return childEdges.map((e) => webNodes.find((n) => n.id === e.target)).filter(Boolean) as Node[];
+    };
+    return { roots, childrenOf };
+  }, [nodes, edges]);
+
+  // Search filter
+  const filteredNodes = useMemo(() => {
+    if (!searchQuery.trim()) return null;
+    const q = searchQuery.toLowerCase();
+    return nodes.filter((n) => {
+      if (n.type === 'webCard') {
+        const url = (n.data.url as string) || '';
+        const title = (n.data.title as string) || '';
+        return url.toLowerCase().includes(q) || title.toLowerCase().includes(q);
+      }
+      if (n.type === 'stickyCard') {
+        return ((n.data.text as string) || '').toLowerCase().includes(q);
+      }
+      return false;
+    });
+  }, [nodes, searchQuery]);
 
   return (
-    <CanvasHandlersContext.Provider value={handlersCtx}>
-    <div
-      className="relative w-full h-full"
-      onDragOver={(e) => {
-        if (e.dataTransfer.types.includes('text/x-rel')) e.preventDefault();
-      }}
-      onDrop={onDrop}
-    >
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
-        nodeTypes={CANVAS_NODE_TYPES}
-        proOptions={{ hideAttribution: true }}
-        fitView
-        minZoom={0.2}
-        maxZoom={2}
-        defaultEdgeOptions={{
-          type: 'smoothstep',
-          style: { stroke: 'rgb(var(--c-accent))', strokeWidth: 1.5 },
-          animated: false,
-        }}
-        connectionLineType={ConnectionLineType.SmoothStep}
-      >
-        <Background gap={22} size={1.4} color="rgb(var(--c-border))" />
-        <Controls
-          position="bottom-left"
-          showInteractive={false}
-          className="!bg-bg-elevated/90 !border !border-border !rounded-md !shadow-sm"
-        />
-      </ReactFlow>
-
-      {/* Centered floating toolbar pill */}
-      <CanvasToolbar
-        onAddSticky={() => addCard('sticky')}
-        onAddText={() => addCard('text')}
-        onAddNote={(rel) => addCard('file', rel)}
-      />
-
-      {/* Labelled overview / minimap */}
-      <div className="absolute bottom-3 right-3 z-10 anim-fade-up">
-        <div className="rounded-md border border-border bg-bg-elevated/95 backdrop-blur shadow-sm overflow-hidden">
-          <div className="px-2.5 py-1 font-mono text-[9.5px] uppercase tracking-[0.12em] text-text-subtle border-b border-border-subtle">
-            Overview
-          </div>
-          <MiniMap
-            pannable
-            zoomable
-            nodeColor={(n) => {
-              if (n.type === 'fileCard') return 'rgb(var(--c-link))';
-              if (n.type === 'stickyCard') {
-                const c = (n.data?.color as StickyColor) ?? 'yellow';
-                return c === 'yellow'
-                  ? 'rgb(220 188 80)'
-                  : c === 'pink'
-                  ? 'rgb(216 144 132)'
-                  : 'rgb(140 168 210)';
-              }
-              return 'rgb(var(--c-accent))';
-            }}
-            maskColor="rgb(var(--c-bg) / 0.7)"
-            style={{ background: 'transparent', width: 168, height: 110, margin: 0 }}
-            className="!relative !top-0 !left-0 !right-0 !bottom-0"
-          />
-        </div>
-      </div>
-
-      {/* Hint */}
-      {nodes.length === 0 && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="text-center bg-bg-elevated/70 backdrop-blur border border-border rounded-xl px-6 py-4">
-            <div className="text-text mb-1 font-medium">Empty canvas</div>
-            <div className="text-xs text-text-muted">
-              Drop a note from the sidebar, or use the toolbar to add a card.
+    <HandlersCtx.Provider value={handlersCtx}>
+      <div className="relative w-full h-full flex">
+        {/* Layers panel */}
+        {layersPanelOpen && (
+          <div className="w-56 shrink-0 border-r border-border bg-bg-elevated/95 backdrop-blur flex flex-col z-20 overflow-hidden">
+            <div className="flex items-center justify-between px-3 py-2.5 border-b border-border">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-text">
+                <Layers size={12} />
+                <span>Pages</span>
+              </div>
+              <button onClick={() => setLayersPanelOpen(false)} className="p-0.5 rounded text-text-muted hover:text-text hover:bg-bg-hover">
+                <X size={12} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto py-1">
+              {layersTree.roots.length === 0 && (
+                <div className="px-3 py-4 text-xs text-text-subtle text-center">No pages yet</div>
+              )}
+              {layersTree.roots.map((node) => (
+                <LayerTreeItem key={node.id} node={node} childrenOf={layersTree.childrenOf} onFocus={focusNode} depth={0} />
+              ))}
             </div>
           </div>
+        )}
+
+        {/* Main canvas area */}
+        <div className="relative flex-1 h-full">
+          <ReactFlow
+            nodes={nodes} edges={edges}
+            onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect}
+            nodeTypes={NODE_TYPES} proOptions={{ hideAttribution: true }}
+            fitView minZoom={0.1} maxZoom={2}
+            defaultEdgeOptions={{ type: 'smoothstep', style: EDGE_STYLE, animated: false }}
+            connectionLineType={ConnectionLineType.SmoothStep}
+            deleteKeyCode={null}
+          >
+            <Background gap={22} size={1.4} color="rgb(var(--c-border))" />
+          </ReactFlow>
+
+          {/* Layers toggle when closed */}
+          {!layersPanelOpen && (
+            <button onClick={() => setLayersPanelOpen(true)} className="absolute top-3 left-3 z-10 p-2 rounded-lg bg-bg-elevated/95 backdrop-blur border border-border shadow-sm text-text-muted hover:text-text hover:bg-bg-hover" title="Show layers">
+              <Layers size={14} />
+            </button>
+          )}
+
+          {/* Search bar */}
+          {searchOpen && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 w-80">
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-bg-elevated/95 backdrop-blur shadow-lg">
+                <Search size={13} className="text-text-subtle shrink-0" />
+                <input
+                  autoFocus
+                  placeholder="Search pages and notes..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Escape') { setSearchOpen(false); setSearchQuery(''); } }}
+                  className="flex-1 bg-transparent outline-none text-sm text-text placeholder:text-text-subtle"
+                />
+                <button onClick={() => { setSearchOpen(false); setSearchQuery(''); }} className="p-0.5 rounded text-text-muted hover:text-text">
+                  <X size={12} />
+                </button>
+              </div>
+              {filteredNodes && filteredNodes.length > 0 && (
+                <div className="mt-1 rounded-lg border border-border bg-bg-elevated/95 backdrop-blur shadow-lg max-h-60 overflow-y-auto">
+                  {filteredNodes.map((n) => (
+                    <button key={n.id} onClick={() => { focusNode(n.id); setSearchOpen(false); setSearchQuery(''); }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-bg-hover border-b border-border-subtle last:border-0">
+                      {n.type === 'webCard' ? <Globe size={12} className="text-text-subtle shrink-0" /> : <StickyNote size={12} className="text-text-subtle shrink-0" />}
+                      <span className="text-text truncate">
+                        {n.type === 'webCard' ? getDomain(n.data.url as string) : ((n.data.text as string) || 'Empty note').slice(0, 40)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* URL input popup */}
+          {urlInputOpen && (
+            <UrlInputPopup
+              onSubmit={(url) => { addWebNode(url); setUrlInputOpen(false); }}
+              onClose={() => setUrlInputOpen(false)}
+            />
+          )}
+
+          {/* Bottom toolbar */}
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10">
+            <div className="flex items-center gap-1 px-2 py-1.5 rounded-xl bg-bg-elevated/95 backdrop-blur border border-border shadow-lg">
+              <ToolbarButton icon={<Plus size={13} />} label="Page" onClick={() => setUrlInputOpen(true)} title="Add page (Cmd+K)" />
+              <ToolbarButton icon={<StickyNote size={13} />} label="Note" onClick={addSticky} title="Add sticky note" />
+              <div className="w-px h-5 bg-border mx-1" />
+              <ToolbarButton icon={<Search size={13} />} label="Search" onClick={() => setSearchOpen((v) => !v)} title="Search (Cmd+F)" />
+              <ToolbarButton icon={<Pause size={13} />} label={paused ? 'Resume' : 'Pause'} onClick={togglePause} active={paused} title="Pause/resume all webviews" />
+              <ToolbarButton icon={<Trash2 size={13} />} label="Clear" onClick={clearAll} title="Clear all nodes" />
+              <div className="w-px h-5 bg-border mx-1" />
+              <button onClick={zoomOut} className="p-1.5 rounded-lg text-text-muted hover:text-text hover:bg-bg-hover" title="Zoom out"><Minus size={13} /></button>
+              <span className="text-[11px] text-text-muted font-mono w-10 text-center">{zoomLevel}%</span>
+              <button onClick={zoomIn} className="p-1.5 rounded-lg text-text-muted hover:text-text hover:bg-bg-hover" title="Zoom in"><ZoomIn size={13} /></button>
+            </div>
+          </div>
+
+          {/* Empty state */}
+          {nodes.length === 0 && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="text-center bg-bg-elevated/70 backdrop-blur border border-border rounded-xl px-6 py-4">
+                <div className="text-text mb-1 font-medium">Spatial Research Browser</div>
+                <div className="text-xs text-text-muted">Press Cmd+K or click "+ Page" to add your first web page.</div>
+              </div>
+            </div>
+          )}
         </div>
-      )}
-    </div>
-    </CanvasHandlersContext.Provider>
+      </div>
+    </HandlersCtx.Provider>
   );
 }
 
-function CanvasToolbar({
-  onAddSticky,
-  onAddText,
-  onAddNote,
-}: {
-  onAddSticky: () => void;
-  onAddText: () => void;
-  onAddNote: (rel: string) => void;
-}) {
-  return (
-    <div className="anim-fade-up absolute top-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1 px-1.5 py-1 rounded-full bg-bg-elevated/95 backdrop-blur border border-border shadow-sm">
-      <ToolPill icon={<MousePointer2 size={13} />} label="Select" active />
-      <ToolPill icon={<StickyNote size={13} />} label="Sticky" onClick={onAddSticky} />
-      <NoteCardPill onPick={onAddNote} />
-      <ToolPill icon={<Type size={13} />} label="Text" onClick={onAddText} />
-      <ToolPill
-        icon={<ArrowRight size={13} />}
-        label="Arrow"
-        title="Drag from a card edge to connect"
-      />
-      <ToolPill icon={<PencilLine size={13} />} label="Pen" title="Coming soon" disabled />
-    </div>
-  );
-}
+// ─── Toolbar button ─────────────────────────────────────────────────────────
 
-function ToolPill({
-  icon,
-  label,
-  active,
-  onClick,
-  title,
-  disabled,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  active?: boolean;
-  onClick?: () => void;
-  title?: string;
-  disabled?: boolean;
+function ToolbarButton({ icon, label, onClick, title, active }: {
+  icon: React.ReactNode; label: string; onClick: () => void; title?: string; active?: boolean;
 }) {
   return (
-    <button
-      onClick={disabled ? undefined : onClick}
-      title={title}
-      disabled={disabled}
-      className={cn(
-        'press flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px]',
-        active && 'bg-text text-bg font-medium',
-        !active && !disabled && 'text-text-muted hover:bg-bg-hover hover:text-text',
-        disabled && 'text-text-subtle cursor-not-allowed opacity-60'
+    <button onClick={onClick} title={title}
+      className={cn('flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-colors',
+        active ? 'bg-accent text-white' : 'text-text-muted hover:bg-bg-hover hover:text-text'
       )}
     >
-      {icon}
-      <span>{label}</span>
+      {icon}<span>{label}</span>
     </button>
   );
 }
 
-function NoteCardPill({ onPick }: { onPick: (rel: string) => void }) {
-  const [open, setOpen] = useState(false);
+// ─── URL input popup ────────────────────────────────────────────────────────
+
+function UrlInputPopup({ onSubmit, onClose }: { onSubmit: (url: string) => void; onClose: () => void }) {
+  const [url, setUrl] = useState('');
   return (
-    <div className="relative">
-      <ToolPill
-        icon={<FileText size={13} />}
-        label="Note card"
-        onClick={() => setOpen((v) => !v)}
-      />
-      {open && (
-        <div onMouseLeave={() => setOpen(false)}>
-          <NoteCardSearch
-            onPick={(rel) => {
-              onPick(rel);
-              setOpen(false);
-            }}
-          />
+    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 w-[420px]">
+      <div className="rounded-xl border border-border bg-bg-elevated shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+          <span className="text-sm font-medium text-text">Open URL</span>
+          <button onClick={onClose} className="p-1 rounded text-text-muted hover:text-text"><X size={14} /></button>
         </div>
-      )}
-    </div>
-  );
-}
-
-function NoteCardSearch({ onPick }: { onPick: (rel: string) => void }) {
-  const files = useVault((s) => s.files);
-  const [q, setQ] = useState('');
-  const matches = useMemo(() => {
-    const arr = [...files.values()].filter((f) => !f.rel.endsWith('.canvas'));
-    const query = q.trim().toLowerCase();
-    if (!query) return arr.slice(0, 12);
-    return arr.filter((f) => (f.title || f.name).toLowerCase().includes(query)).slice(0, 12);
-  }, [files, q]);
-  return (
-    <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 w-72 rounded-lg border border-border bg-bg-elevated shadow-2xl py-1">
-      <input
-        autoFocus
-        placeholder="Search notes…"
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        className="w-full bg-transparent outline-none px-3 py-2 text-sm border-b border-border placeholder:text-text-subtle"
-      />
-      <div className="max-h-64 overflow-y-auto">
-        {matches.length === 0 ? (
-          <div className="px-3 py-3 text-xs text-text-subtle">No notes</div>
-        ) : (
-          matches.map((f) => (
-            <button
-              key={f.rel}
-              onClick={() => onPick(f.rel)}
-              className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-bg-hover"
-            >
-              <FileText size={13} className="text-text-subtle shrink-0" />
-              <div className="flex-1 min-w-0">
-                <div className="text-text truncate">{f.title || f.name}</div>
-                <div className="text-[10px] text-text-subtle truncate">{f.rel}</div>
-              </div>
-            </button>
-          ))
-        )}
-      </div>
-    </div>
-  );
-}
-
-function CardResizer({
-  minWidth,
-  minHeight,
-  selected,
-}: {
-  minWidth: number;
-  minHeight: number;
-  selected?: boolean;
-}) {
-  return (
-    <NodeResizer
-      isVisible={!!selected}
-      minWidth={minWidth}
-      minHeight={minHeight}
-      lineClassName="canvas-resize-line"
-      handleClassName="canvas-resize-handle"
-    />
-  );
-}
-
-const STICKY_STYLES: Record<StickyColor, { bg: string; border: string; ink: string; tab: string }> = {
-  yellow: {
-    bg: 'bg-[#f5e7a8]',
-    border: 'border-[#d4ba5a]',
-    ink: 'text-[#3a2f12]',
-    tab: 'text-[#7a6520]',
-  },
-  pink: {
-    bg: 'bg-[#f0c8c0]',
-    border: 'border-[#c9968b]',
-    ink: 'text-[#3a1f1a]',
-    tab: 'text-[#824840]',
-  },
-  blue: {
-    bg: 'bg-[#cfdcef]',
-    border: 'border-[#9bb1cd]',
-    ink: 'text-[#16223a]',
-    tab: 'text-[#3e5374]',
-  },
-};
-
-function StickyCard({
-  data,
-  selected,
-  onChange,
-  onColor,
-  onRemove,
-}: NodeProps & {
-  onChange: (s: string) => void;
-  onColor: (c: StickyColor) => void;
-  onRemove: () => void;
-}) {
-  const color = ((data.color as StickyColor) ?? 'yellow') as StickyColor;
-  const [text, setText] = useState((data.text as string) ?? '');
-  useEffect(() => setText((data.text as string) ?? ''), [data.text]);
-  const styles = STICKY_STYLES[color] ?? STICKY_STYLES.yellow;
-  return (
-    <div
-      className={cn(
-        'anim-drop-in group w-full h-full flex flex-col rounded-lg shadow-md border overflow-hidden',
-        styles.bg,
-        styles.border
-      )}
-    >
-      <CardResizer minWidth={160} minHeight={100} selected={selected} />
-      <CardHandles color="accent" />
-      <div className={cn('flex items-center justify-between px-2.5 py-1 cursor-grab active:cursor-grabbing', styles.tab)}>
-        <span className="text-[9.5px] uppercase tracking-[0.12em] font-medium">Sticky</span>
-        <div className="flex items-center gap-1">
-          {(['yellow', 'pink', 'blue'] as StickyColor[]).map((c) => (
-            <button
-              key={c}
-              onClick={() => onColor(c)}
-              title={c}
-              className={cn(
-                'w-2.5 h-2.5 rounded-full border opacity-0 group-hover:opacity-100 transition-opacity',
-                c === color ? 'ring-1 ring-current' : 'border-current/30',
-                c === 'yellow' && 'bg-[#e8c95c]',
-                c === 'pink' && 'bg-[#d39084]',
-                c === 'blue' && 'bg-[#7f9cc6]'
-              )}
+        <form onSubmit={(e) => { e.preventDefault(); onSubmit(url.trim() || 'https://google.com'); }} className="p-4">
+          <div className="flex items-center gap-2 bg-bg rounded-lg border border-border px-3 py-2">
+            <Globe size={14} className="text-text-subtle shrink-0" />
+            <input
+              autoFocus
+              placeholder="Enter URL or search term..."
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }}
+              className="flex-1 bg-transparent outline-none text-sm text-text placeholder:text-text-subtle"
             />
-          ))}
-          <button
-            className="ml-1 opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity"
-            onClick={onRemove}
-            title="Delete"
-          >
-            <Trash2 size={11} />
-          </button>
-        </div>
+          </div>
+          <div className="flex justify-end mt-3 gap-2">
+            <button type="button" onClick={onClose} className="px-3 py-1.5 text-xs rounded-lg text-text-muted hover:bg-bg-hover">Cancel</button>
+            <button type="submit" className="px-3 py-1.5 text-xs rounded-lg bg-accent text-white hover:bg-accent-hover font-medium">Open</button>
+          </div>
+        </form>
       </div>
-      <textarea
-        value={text}
-        onChange={(e) => {
-          setText(e.target.value);
-          onChange(e.target.value);
-        }}
-        placeholder="Jot a thought…"
-        className={cn(
-          'flex-1 bg-transparent outline-none px-3 pb-3 pt-1 text-[13px] font-medium leading-snug resize-none nodrag placeholder:opacity-50',
-          styles.ink
-        )}
-      />
     </div>
   );
 }
 
-function TextCard({
-  data,
-  selected,
-  onChange,
-  onRemove,
-}: NodeProps & { onChange: (s: string) => void; onRemove: () => void }) {
-  const [text, setText] = useState((data.text as string) ?? '');
-  useEffect(() => setText((data.text as string) ?? ''), [data.text]);
+// ─── Layer tree item ────────────────────────────────────────────────────────
+
+function LayerTreeItem({ node, childrenOf, onFocus, depth }: {
+  node: Node; childrenOf: (id: string) => Node[]; onFocus: (id: string) => void; depth: number;
+}) {
+  const [expanded, setExpanded] = useState(true);
+  const children = childrenOf(node.id);
+  const url = (node.data.url as string) || '';
+  const domain = getDomain(url);
+
   return (
-    <div className="anim-drop-in group w-full h-full flex flex-col rounded-xl bg-bg-elevated border border-border shadow-md hover:border-accent/50 transition-colors overflow-hidden">
-      <CardResizer minWidth={160} minHeight={80} selected={selected} />
-      <CardHandles color="accent" />
-      <div className="flex items-center justify-between px-3 py-1.5 border-b border-border bg-bg cursor-grab active:cursor-grabbing">
-        <span className="text-[10px] uppercase tracking-wider text-text-subtle">Text</span>
-        <button
-          className="text-text-subtle hover:text-red-400 opacity-0 group-hover:opacity-100"
-          onClick={onRemove}
-          title="Delete"
-        >
-          <Trash2 size={11} />
-        </button>
-      </div>
-      <textarea
-        value={text}
-        onChange={(e) => {
-          setText(e.target.value);
-          onChange(e.target.value);
-        }}
-        placeholder="Type something…"
-        className="flex-1 bg-transparent outline-none p-3 text-sm text-text resize-none placeholder:text-text-subtle nodrag"
-      />
+    <div>
+      <button
+        onClick={() => onFocus(node.id)}
+        className={cn('w-full flex items-center gap-1.5 px-2 py-1.5 text-left text-xs hover:bg-bg-hover group')}
+        style={{ paddingLeft: `${8 + depth * 16}px` }}
+      >
+        {children.length > 0 ? (
+          <button onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }} className="p-0.5 text-text-subtle hover:text-text shrink-0">
+            {expanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+          </button>
+        ) : (
+          <span className="w-4 shrink-0" />
+        )}
+        <Globe size={11} className="text-text-subtle shrink-0" />
+        <span className="text-text truncate flex-1">{domain}</span>
+      </button>
+      {expanded && children.map((child) => (
+        <LayerTreeItem key={child.id} node={child} childrenOf={childrenOf} onFocus={onFocus} depth={depth + 1} />
+      ))}
     </div>
   );
 }
 
-/** Each card gets 4 handles (top/right/bottom/left). Each handle id is the side name,
- *  and acts as both source and target — react-flow lets us pass type for both. We do this
- *  by registering two handles per side (target + source) but with the same id, which
- *  works since react-flow distinguishes by type at connect time. */
-function CardHandles({ color }: { color: 'accent' | 'link' }) {
-  const cls = `!w-2 !h-2 !border-0 !${color === 'accent' ? 'bg-accent' : 'bg-link'}`;
+// ─── Shared card primitives ──────────────────────────────────────────────────
+
+function CardResizer({ minWidth, minHeight, selected }: { minWidth: number; minHeight: number; selected?: boolean }) {
+  return <NodeResizer isVisible={!!selected} minWidth={minWidth} minHeight={minHeight} lineClassName="canvas-resize-line" handleClassName="canvas-resize-handle" />;
+}
+
+function CardHandles() {
+  const cls = '!w-2 !h-2 !border-0 !bg-accent';
   return (
     <>
       <Handle id="top" type="target" position={Position.Top} className={cls} />
@@ -713,156 +583,241 @@ function CardHandles({ color }: { color: 'accent' | 'link' }) {
   );
 }
 
-function FileCard({ data, selected, onRemove }: NodeProps & { onRemove: () => void }) {
-  const fileRel = data.file as string;
-  const file = useVault((s) => s.files.get(fileRel));
-  const openFile = useVault((s) => s.openFile);
-  const setView = useVault((s) => s.setView);
-  const vaultPath = useVault((s) => s.vaultPath);
-  const [preview, setPreview] = useState('');
+// ─── Sticky card ────────────────────────────────────────────────────────────
+
+const STICKY_STYLES: Record<StickyColor, { bg: string; border: string; ink: string; tab: string }> = {
+  yellow: { bg: 'bg-[#f5e7a8]', border: 'border-[#d4ba5a]', ink: 'text-[#3a2f12]', tab: 'text-[#7a6520]' },
+  pink: { bg: 'bg-[#f0c8c0]', border: 'border-[#c9968b]', ink: 'text-[#3a1f1a]', tab: 'text-[#824840]' },
+  blue: { bg: 'bg-[#cfdcef]', border: 'border-[#9bb1cd]', ink: 'text-[#16223a]', tab: 'text-[#3e5374]' },
+};
+
+function StickyCard({ data, selected, onChange, onColor, onRemove }: NodeProps & { onChange: (s: string) => void; onColor: (c: StickyColor) => void; onRemove: () => void }) {
+  const color = ((data.color as StickyColor) ?? 'yellow') as StickyColor;
+  const [text, setText] = useState((data.text as string) ?? '');
+  useEffect(() => setText((data.text as string) ?? ''), [data.text]);
+  const s = STICKY_STYLES[color] ?? STICKY_STYLES.yellow;
+  return (
+    <div className={cn('group w-full h-full flex flex-col rounded-lg shadow-md border overflow-hidden', s.bg, s.border)}>
+      <CardResizer minWidth={160} minHeight={100} selected={selected} />
+      <CardHandles />
+      <div className={cn('flex items-center justify-between px-2.5 py-1 cursor-grab active:cursor-grabbing', s.tab)}>
+        <span className="text-[9.5px] uppercase tracking-[0.12em] font-medium">Sticky</span>
+        <div className="flex items-center gap-1">
+          {(['yellow', 'pink', 'blue'] as StickyColor[]).map((c) => (
+            <button key={c} onClick={() => onColor(c)} title={c} className={cn('w-2.5 h-2.5 rounded-full border opacity-0 group-hover:opacity-100 transition-opacity', c === color ? 'ring-1 ring-current' : 'border-current/30', c === 'yellow' && 'bg-[#e8c95c]', c === 'pink' && 'bg-[#d39084]', c === 'blue' && 'bg-[#7f9cc6]')} />
+          ))}
+          <button className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={onRemove} title="Delete"><Trash2 size={11} /></button>
+        </div>
+      </div>
+      <textarea value={text} onChange={(e) => { setText(e.target.value); onChange(e.target.value); }} placeholder="Jot a thought..." className={cn('flex-1 bg-transparent outline-none px-3 pb-3 pt-1 text-[13px] font-medium leading-snug resize-none nodrag placeholder:opacity-50', s.ink)} />
+    </div>
+  );
+}
+
+// ─── Web page card (spatial browser node) ────────────────────────────────────
+
+type WebviewEl = HTMLElement & {
+  loadURL: (u: string) => void;
+  goBack: () => void;
+  goForward: () => void;
+  reload: () => void;
+  stop: () => void;
+  canGoBack: () => boolean;
+  canGoForward: () => boolean;
+  setZoomFactor: (f: number) => void;
+  getURL: () => string;
+};
+
+function WebPageCard({ data, selected, onNavigate, onRemove, onLinkClick, onColorChange }: NodeProps & {
+  onNavigate: (url: string) => void;
+  onRemove: () => void;
+  onLinkClick: (url: string) => void;
+  onColorChange: (c: WebColor) => void;
+}) {
+  const initialUrl = (data.url as string) || 'https://google.com';
+  const nodeColor = (data.color as WebColor) || 'none';
+  const isPaused = data.paused as boolean;
+  const [inputUrl, setInputUrl] = useState(initialUrl);
+  const [loading, setLoading] = useState(true);
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const wvRef = useRef<WebviewEl | null>(null);
+  const isBarNavRef = useRef(false);
 
   useEffect(() => {
-    if (!vaultPath || !file) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const raw = await api.files.read(file.path);
-        if (cancelled) return;
-        const noFm = raw.replace(/^---\n[\s\S]*?\n---\n?/, '');
-        // Strip first heading (used as title), then take first ~140 chars
-        const noHeading = noFm.replace(/^#+\s.*\n+/, '').trim();
-        setPreview(noHeading.slice(0, 800));
-      } catch {
-        /* skip */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [vaultPath, file]);
+    if (isPaused && wvRef.current) {
+      try { wvRef.current.stop(); } catch {}
+    }
+  }, [isPaused]);
 
-  const category = file?.tags?.[0];
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || isPaused) return;
+
+    const wv = document.createElement('webview') as unknown as WebviewEl;
+    wv.setAttribute('src', initialUrl);
+    wv.setAttribute('partition', 'persist:browse');
+    wv.setAttribute('allowpopups', '');
+    (wv as unknown as HTMLElement).style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:none;border-radius:0 0 8px 8px;';
+    container.appendChild(wv as unknown as HTMLElement);
+    wvRef.current = wv;
+
+    const el = wv as unknown as HTMLElement;
+    const onStart = () => setLoading(true);
+    const onStop = () => setLoading(false);
+    const onNav = (e: unknown) => {
+      const u = (e as { url: string }).url;
+      if (u) { setInputUrl(u); onNavigate(u); }
+    };
+
+    // new-window (target=_blank links) spawn children
+    const onNewWindow = (e: unknown) => {
+      const u = (e as { url: string }).url;
+      if (u) onLinkClick(u);
+    };
+
+    el.addEventListener('did-start-loading', onStart);
+    el.addEventListener('did-stop-loading', onStop);
+    el.addEventListener('did-navigate', onNav as EventListener);
+    el.addEventListener('did-navigate-in-page', onNav as EventListener);
+    el.addEventListener('new-window', onNewWindow as EventListener);
+    el.addEventListener('dom-ready', () => { wv.setZoomFactor(0.75); }, { once: true });
+
+    // will-navigate fires BEFORE the webview navigates. We stop it and spawn a child.
+    const onWillNavigate = (e: unknown) => {
+      const u = (e as { url: string }).url;
+      if (!u) return;
+      if (isBarNavRef.current) {
+        isBarNavRef.current = false;
+        return;
+      }
+      // Stop the navigation in this webview and spawn a child instead
+      setTimeout(() => { try { wv.stop(); } catch {} }, 0);
+      onLinkClick(u);
+    };
+    el.addEventListener('will-navigate', onWillNavigate as EventListener);
+
+    return () => {
+      el.removeEventListener('did-start-loading', onStart);
+      el.removeEventListener('did-stop-loading', onStop);
+      el.removeEventListener('did-navigate', onNav as EventListener);
+      el.removeEventListener('did-navigate-in-page', onNav as EventListener);
+      el.removeEventListener('will-navigate', onWillNavigate as EventListener);
+      el.removeEventListener('new-window', onNewWindow as EventListener);
+      container.removeChild(el);
+      wvRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPaused]);
+
+  const navigate = (raw: string) => {
+    let url = raw.trim();
+    if (!url) return;
+    if (!/^https?:\/\//i.test(url)) {
+      url = url.includes('.') && !url.includes(' ') ? `https://${url}` : `https://www.google.com/search?q=${encodeURIComponent(url)}`;
+    }
+    setInputUrl(url);
+    isBarNavRef.current = true;
+    wvRef.current?.loadURL(url);
+  };
+
+  const borderCls = WEB_BORDER_COLORS[nodeColor] || 'border-border';
 
   return (
-    <div className="anim-drop-in group w-full h-full flex flex-col rounded-xl bg-bg-elevated border border-border shadow-md hover:border-link/60 transition-colors overflow-hidden">
-      <CardResizer minWidth={200} minHeight={100} selected={selected} />
-      <CardHandles color="link" />
-      {category && (
-        <div className="px-3 pt-2.5 pb-1 flex items-center gap-1.5">
-          <FileText size={11} className="text-accent shrink-0" />
-          <span className="font-mono text-[9.5px] uppercase tracking-[0.14em] text-accent font-medium">
-            {category}
-          </span>
+    <div className={cn('group w-full h-full flex flex-col rounded-xl bg-bg-elevated border-2 shadow-lg overflow-hidden', borderCls)}>
+      <CardResizer minWidth={400} minHeight={300} selected={selected} />
+      <CardHandles />
+
+      {/* Chrome bar */}
+      <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-border bg-bg cursor-grab active:cursor-grabbing">
+        <div className="w-3 h-3 rounded-full bg-text-subtle/20 shrink-0" title="Favicon" />
+        <form onSubmit={(e) => { e.preventDefault(); navigate(inputUrl); }} className="flex-1 flex items-center bg-bg-hover rounded-md px-2 py-1 min-w-0 nodrag">
+          <input value={inputUrl} onChange={(e) => setInputUrl(e.target.value)} onFocus={(e) => e.target.select()} className="flex-1 bg-transparent outline-none text-[11px] text-text font-mono truncate" />
+        </form>
+        <div className="flex items-center gap-0.5 shrink-0 nodrag">
+          <button onClick={() => setShowColorPicker((v) => !v)} className="p-1 rounded text-text-muted hover:text-text hover:bg-bg-hover relative" title="Color">
+            <div className={cn('w-3 h-3 rounded-full border', nodeColor === 'none' ? 'border-text-subtle/40 bg-transparent' : WEB_COLORS.find((c) => c.value === nodeColor)?.cls)} />
+          </button>
+          <button onClick={() => { if (inputUrl) window.open(inputUrl, '_blank'); }} className="p-1 rounded text-text-muted hover:text-text hover:bg-bg-hover" title="Open in system browser"><ExternalLink size={11} /></button>
+          <button onClick={onRemove} className="p-1 rounded text-text-muted hover:text-red-400 opacity-0 group-hover:opacity-100" title="Close"><X size={11} /></button>
+        </div>
+      </div>
+
+      {/* Color picker dropdown */}
+      {showColorPicker && (
+        <div className="absolute top-10 right-2 z-50 p-2 rounded-lg border border-border bg-bg-elevated shadow-xl flex items-center gap-1.5 nodrag">
+          {WEB_COLORS.map((c) => (
+            <button key={c.value} onClick={() => { onColorChange(c.value); setShowColorPicker(false); }} title={c.label}
+              className={cn('w-5 h-5 rounded-full border-2 transition-transform hover:scale-110',
+                c.value === 'none' ? 'border-text-subtle/40 bg-transparent' : cn(c.cls, 'border-transparent'),
+                c.value === nodeColor && 'ring-2 ring-accent ring-offset-1'
+              )}
+            />
+          ))}
         </div>
       )}
-      <div className={cn('px-3 flex items-center justify-between gap-2', category ? 'pt-0.5 pb-2' : 'pt-3 pb-2')}>
-        <button
-          onClick={() => {
-            if (file) {
-              openFile(file.rel);
-              setView('editor');
-            }
-          }}
-          className="text-[15px] font-serif font-semibold text-text truncate hover:underline nodrag text-left flex-1 min-w-0"
-          title={fileRel}
-        >
-          {file?.title || basenameNoExt(fileRel)}
-        </button>
-        <button
-          className="text-text-subtle hover:text-red-400 opacity-0 group-hover:opacity-100 shrink-0"
-          onClick={onRemove}
-          title="Remove from canvas"
-        >
-          <Trash2 size={11} />
-        </button>
-      </div>
-      <div className="flex-1 overflow-hidden px-3 pb-3 text-xs text-text-muted leading-relaxed">
-        {file ? preview || <span className="italic text-text-subtle">empty note</span> : (
-          <span className="italic text-tag">missing: {fileRel}</span>
+
+      {/* Webview container */}
+      <div ref={containerRef} className="flex-1 relative nodrag" style={{ minHeight: 200 }}>
+        {isPaused && (
+          <div className="absolute inset-0 flex items-center justify-center bg-bg/80 z-10">
+            <div className="text-xs text-text-muted">Paused</div>
+          </div>
         )}
+        {loading && !isPaused && <div className="absolute top-0 left-0 right-0 h-0.5 bg-accent/30 overflow-hidden z-10"><div className="h-full w-1/3 bg-accent animate-pulse" /></div>}
       </div>
     </div>
   );
 }
 
-// ---- conversion: canvas-file format <-> react-flow ----
+// ─── Utility ────────────────────────────────────────────────────────────────
+
+function normalizeUrl(raw: string): string {
+  const url = raw.trim();
+  if (!url) return 'https://google.com';
+  if (/^https?:\/\//i.test(url)) return url;
+  if (url.includes('.') && !url.includes(' ')) return `https://${url}`;
+  return `https://www.google.com/search?q=${encodeURIComponent(url)}`;
+}
+
+function getDomain(url: string): string {
+  try {
+    const u = new URL(url);
+    return u.hostname.replace(/^www\./, '');
+  } catch {
+    return url.slice(0, 30);
+  }
+}
+
+// ─── Format conversion ───────────────────────────────────────────────────────
+
 function canvasNodesToFlow(nodes: CanvasNode[]): Node[] {
   return nodes.map((n) => {
-    const base: Node = {
-      id: n.id,
-      position: { x: n.x, y: n.y },
-      style: { width: n.width, height: n.height },
-      data: {},
-    };
-    if (n.type === 'text') {
-      return { ...base, type: 'textCard', data: { text: n.text } };
+    const base = { id: n.id, position: { x: n.x, y: n.y }, style: { width: n.width, height: n.height }, data: {} as Record<string, unknown> };
+    switch (n.type) {
+      case 'sticky': return { ...base, type: 'stickyCard', data: { text: n.text, color: n.color } };
+      case 'web': return { ...base, type: 'webCard', data: { url: n.url, color: n.color || 'none', paused: false } };
     }
-    if (n.type === 'sticky') {
-      return { ...base, type: 'stickyCard', data: { text: n.text, color: n.color } };
-    }
-    return { ...base, type: 'fileCard', data: { file: n.file } };
   });
 }
 
 function canvasEdgesToFlow(edges: CanvasEdge[]): Edge[] {
-  return edges.map((e) => ({
-    id: e.id,
-    source: e.fromNode,
-    target: e.toNode,
-    sourceHandle: e.fromSide,
-    targetHandle: e.toSide,
-    label: e.label,
-    type: 'smoothstep',
-    style: { stroke: 'rgb(var(--c-accent))', strokeWidth: 1.5 },
-  }));
+  return edges.map((e) => ({ id: e.id, source: e.fromNode, target: e.toNode, sourceHandle: e.fromSide, targetHandle: e.toSide, label: e.label, type: 'smoothstep', style: EDGE_STYLE }));
 }
 
 function flowNodesToCanvas(nodes: Node[]): CanvasNode[] {
   return nodes.map((n) => {
     const w = (n.style?.width as number) ?? 240;
     const h = (n.style?.height as number) ?? 120;
-    if (n.type === 'fileCard') {
-      return {
-        id: n.id,
-        type: 'file',
-        x: n.position.x,
-        y: n.position.y,
-        width: w,
-        height: h,
-        file: (n.data.file as string) ?? '',
-      };
+    const pos = { id: n.id, x: n.position.x, y: n.position.y, width: w, height: h };
+    switch (n.type) {
+      case 'stickyCard': return { ...pos, type: 'sticky' as const, text: (n.data.text as string) ?? '', color: ((n.data.color as StickyColor) ?? 'yellow') };
+      case 'webCard': return { ...pos, type: 'web' as const, url: (n.data.url as string) ?? 'https://google.com', color: (n.data.color as WebColor) || undefined };
+      default: return { ...pos, type: 'sticky' as const, text: '', color: 'yellow' as const };
     }
-    if (n.type === 'stickyCard') {
-      return {
-        id: n.id,
-        type: 'sticky',
-        x: n.position.x,
-        y: n.position.y,
-        width: w,
-        height: h,
-        text: (n.data.text as string) ?? '',
-        color: ((n.data.color as StickyColor) ?? 'yellow') as StickyColor,
-      };
-    }
-    return {
-      id: n.id,
-      type: 'text',
-      x: n.position.x,
-      y: n.position.y,
-      width: w,
-      height: h,
-      text: (n.data.text as string) ?? '',
-    };
   });
 }
 
 function flowEdgesToCanvas(edges: Edge[]): CanvasEdge[] {
-  return edges.map((e) => ({
-    id: e.id,
-    fromNode: e.source,
-    toNode: e.target,
-    fromSide: e.sourceHandle ?? undefined,
-    toSide: e.targetHandle ?? undefined,
-    label: typeof e.label === 'string' ? e.label : undefined,
-  }));
+  return edges.map((e) => ({ id: e.id, fromNode: e.source, toNode: e.target, fromSide: e.sourceHandle ?? undefined, toSide: e.targetHandle ?? undefined, label: typeof e.label === 'string' ? e.label : undefined }));
 }

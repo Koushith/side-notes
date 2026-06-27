@@ -12,6 +12,7 @@ import {
   ListOrdered,
   ListChecks,
   Quote,
+  Highlighter,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { promptUser } from './PromptDialog';
@@ -83,6 +84,13 @@ export function EditorBubbleMenu({ editor }: Props) {
         title="Inline code"
       >
         <Code size={14} />
+      </ToolButton>
+      <ToolButton
+        active={isActive('highlight')}
+        onClick={() => editor.chain().focus().toggleHighlight().run()}
+        title="Highlight"
+      >
+        <Highlighter size={14} />
       </ToolButton>
       <Separator />
       <ToolButton

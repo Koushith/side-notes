@@ -1,49 +1,28 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  GitBranch,
-  GitCommit,
-  RefreshCw,
-  ArrowUp,
-  ArrowDown,
-  Plus,
-  Minus,
-  RotateCcw,
-  FileText,
-  AlertCircle,
-  Check,
+  GitBranch, GitCommit, RefreshCw, ArrowUp, ArrowDown, Plus, Minus,
+  RotateCcw, AlertCircle, Check, ChevronDown, ChevronRight, X, Clock,
+  Cloud, CloudOff,
 } from 'lucide-react';
 import { useGit } from '@/stores/git';
 import { useVault } from '@/stores/vault';
 import { confirmUser } from './ConfirmDialog';
 import { toast } from './Toast';
 import { cn } from '@/lib/utils';
+import { api } from '@/lib/api';
 import type { GitFileEntry } from '@/types';
 
-// VSCode's status grouping: a file is "staged" if its index column is set to anything
-// other than a space (unmodified) or `?` (untracked). It's in "working changes" if its
-// working column is non-space. The same file can appear in both — that's correct, it
-// means you staged a version and then modified the file again.
-function isStaged(f: GitFileEntry): boolean {
-  return f.index !== ' ' && f.index !== '?';
-}
-function isWorking(f: GitFileEntry): boolean {
-  return f.working !== ' ' || f.index === '?';
-}
+function isStaged(f: GitFileEntry): boolean { return f.index !== ' ' && f.index !== '?'; }
+function isWorking(f: GitFileEntry): boolean { return f.working !== ' ' || f.index === '?'; }
+function statusLetter(f: GitFileEntry, staged: boolean): string { const c = staged ? f.index : f.working; return c === '?' ? 'U' : c.trim() || 'M'; }
 
-function statusLetter(f: GitFileEntry, staged: boolean): string {
-  const code = staged ? f.index : f.working;
-  if (code === '?') return 'U';
-  return code.trim() || 'M';
-}
-
-function statusColor(letter: string): string {
+function statusBg(letter: string): string {
   switch (letter) {
-    case 'A': return 'text-green-500';
-    case 'M': return 'text-amber-500';
-    case 'D': return 'text-red-500';
-    case 'R': return 'text-blue-500';
-    case 'U': return 'text-text-subtle';
-    default: return 'text-text-muted';
+    case 'A': return 'bg-emerald-500/15 text-emerald-500';
+    case 'M': return 'bg-amber-500/15 text-amber-500';
+    case 'D': return 'bg-red-500/15 text-red-400';
+    case 'R': return 'bg-purple-500/15 text-purple-400';
+    default: return 'bg-text-subtle/10 text-text-subtle';
   }
 }
 
@@ -71,87 +50,76 @@ export function SourceControlPanel() {
   const pull = useGit((s) => s.pull);
 
   const [message, setMessage] = useState('');
+  const [diffFile, setDiffFile] = useState<{ path: string; staged: boolean } | null>(null);
+  const [diffContent, setDiffContent] = useState<string>('');
+  const [diffLoading, setDiffLoading] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [historyLog, setHistoryLog] = useState<{ hash: string; message: string; date: string; author: string }[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
-  useEffect(() => {
-    refresh();
-  }, [vaultPath, refresh]);
+  useEffect(() => { refresh(); }, [vaultPath, refresh]);
 
-  const { staged, working } = useMemo(() => {
-    const staged: GitFileEntry[] = [];
-    const working: GitFileEntry[] = [];
-    for (const f of files) {
-      if (isStaged(f)) staged.push(f);
-      if (isWorking(f)) working.push(f);
-    }
-    staged.sort((a, b) => a.path.localeCompare(b.path));
-    working.sort((a, b) => a.path.localeCompare(b.path));
-    return { staged, working };
+  const { staged: stagedFiles, working: workingFiles } = useMemo(() => {
+    const s: GitFileEntry[] = [], w: GitFileEntry[] = [];
+    for (const f of files) { if (isStaged(f)) s.push(f); if (isWorking(f)) w.push(f); }
+    s.sort((a, b) => a.path.localeCompare(b.path));
+    w.sort((a, b) => a.path.localeCompare(b.path));
+    return { staged: s, working: w };
   }, [files]);
+
+  const loadDiff = useCallback(async (path: string, staged: boolean) => {
+    if (!vaultPath) return;
+    if (diffFile?.path === path && diffFile?.staged === staged) { setDiffFile(null); return; }
+    setDiffFile({ path, staged });
+    setDiffLoading(true);
+    const res = await api.git.diff(vaultPath, path, staged);
+    setDiffLoading(false);
+    if (res.ok) setDiffContent(res.diff);
+    else setDiffContent(`Error: ${res.error}`);
+  }, [vaultPath, diffFile]);
+
+  const loadHistory = useCallback(async () => {
+    if (!vaultPath) return;
+    if (showHistory) { setShowHistory(false); return; }
+    setShowHistory(true);
+    setHistoryLoading(true);
+    const res = await api.git.log(vaultPath, 30);
+    setHistoryLoading(false);
+    if (res.ok) setHistoryLog(res.log);
+  }, [vaultPath, showHistory]);
 
   const onCommit = async () => {
     if (!message.trim()) return;
-    // Friendly model: if the user hasn't staged anything but has changes, stage
-    // them all and commit — no one should have to learn "staging" to save a note.
-    if (!staged.length) {
-      if (!working.length) {
-        toast.error('Nothing to commit.');
-        return;
-      }
-      await stage(working.map((f) => f.path));
+    if (!stagedFiles.length) {
+      if (!workingFiles.length) { toast.error('Nothing to commit.'); return; }
+      await stage(workingFiles.map((f) => f.path));
     }
     const ok = await commit(message);
-    if (ok) {
-      setMessage('');
-      toast.success(hasRemote ? 'Committed. Push to send it to GitHub.' : 'Committed.');
-    }
+    if (ok) { setMessage(''); toast.success('Committed.'); }
   };
 
-  // What the commit button does, given current state.
-  const commitCount = staged.length || working.length;
-  const commitLabel = staged.length ? 'Commit' : 'Commit all';
-  const canCommit = !busy && !!message.trim() && commitCount > 0;
-  const hasChanges = staged.length > 0 || working.length > 0;
-  const synced = hasRemote && ahead === 0 && behind === 0;
-
   const onPush = async () => {
-    if (!hasRemote) {
-      toast.error('No remote configured — add one in Terminal first.');
-      return;
-    }
+    if (!hasRemote) { toast.error('No remote configured.'); return; }
     const ok = await push();
-    if (ok) toast.success('Pushed to GitHub.');
+    if (ok) toast.success('Pushed.');
     else toast.error(useGit.getState().lastError ?? 'Push failed.');
   };
 
   const onPull = async () => {
-    if (!hasRemote) {
-      toast.error('No remote configured.');
-      return;
-    }
+    if (!hasRemote) { toast.error('No remote configured.'); return; }
     const ok = await pull();
-    if (ok) toast.success(behind > 0 ? `Pulled ${behind} change${behind === 1 ? '' : 's'}.` : 'Already up to date.');
+    if (ok) toast.success('Pulled.');
     else toast.error(useGit.getState().lastError ?? 'Pull failed.');
   };
 
-  const onCheckForUpdates = async () => {
-    if (!hasRemote) return;
-    const before = useGit.getState().behind;
+  const onFetch = async () => {
     await fetchRemote();
-    const after = useGit.getState().behind;
-    if (useGit.getState().lastError) return;
-    if (after > before) toast.success(`${after - before} new change${after - before === 1 ? '' : 's'} on GitHub. Pull to bring them in.`);
-    else toast.success('Up to date with GitHub.');
+    if (!useGit.getState().lastError) toast.success('Fetched.');
   };
 
   const onDiscard = async (f: GitFileEntry) => {
-    const ok = await confirmUser({
-      title: 'Discard changes?',
-      message: `Throw away changes to ${f.path}? This cannot be undone.`,
-      okLabel: 'Discard',
-      destructive: true,
-    });
-    if (!ok) return;
-    await discard([f.path]);
+    const ok = await confirmUser({ title: 'Discard changes?', message: `Throw away changes to ${f.path}? This cannot be undone.`, okLabel: 'Discard', destructive: true });
+    if (ok) await discard([f.path]);
   };
 
   if (!vaultPath) return null;
@@ -159,334 +127,277 @@ export function SourceControlPanel() {
   if (loaded && !hasRepo) {
     return (
       <div className="h-full flex items-center justify-center bg-bg">
-        <div className="max-w-md text-center px-6">
-          <GitBranch size={28} className="mx-auto mb-3 text-text-subtle" />
-          <h2 className="font-serif text-[22px] font-semibold mb-2 text-text">No git repository</h2>
-          <p className="text-[13px] text-text-muted mb-5 leading-relaxed">
-            This vault isn't tracked by git yet. Initialize a repository to track changes,
-            commit your notes, and sync with a remote.
-          </p>
-          <button
-            onClick={() => initRepo()}
-            disabled={busy}
-            className="px-4 py-2 bg-accent text-bg rounded-md text-[12.5px] font-medium hover:bg-accent-hover disabled:opacity-50 transition-colors"
-          >
-            {busy ? 'Initializing…' : 'Initialize repository'}
+        <div className="max-w-sm text-center px-8">
+          <div className="w-14 h-14 rounded-2xl bg-bg-elevated border border-border flex items-center justify-center mx-auto mb-4">
+            <GitBranch size={24} className="text-text-subtle" />
+          </div>
+          <h2 className="text-[20px] font-semibold mb-2 text-text tracking-tight">No repository</h2>
+          <p className="text-[13px] text-text-muted mb-5 leading-relaxed">Initialize a git repository to start tracking changes and syncing with a remote.</p>
+          <button onClick={() => initRepo()} disabled={busy} className="px-5 py-2.5 bg-accent text-bg rounded-lg text-[13px] font-semibold hover:bg-accent-hover disabled:opacity-50 transition-colors">
+            {busy ? 'Initializing...' : 'Initialize repository'}
           </button>
-          {lastError && (
-            <p className="mt-4 text-[12px] text-red-500 flex items-center justify-center gap-1.5">
-              <AlertCircle size={12} /> {lastError}
-            </p>
-          )}
         </div>
       </div>
     );
   }
 
-  const busyOrChecking = busy || checking;
+  const commitCount = stagedFiles.length || workingFiles.length;
+  const canCommit = !busy && !!message.trim() && commitCount > 0;
+  const synced = hasRemote && ahead === 0 && behind === 0;
 
   return (
-    <div className="h-full flex flex-col bg-bg">
-      {/* Header: branch identity */}
-      <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-border-subtle">
-        <div className="flex items-center gap-2 min-w-0">
-          <GitBranch size={15} className="text-text-muted shrink-0" />
-          <span className="font-mono text-[13px] text-text truncate">{branch ?? '—'}</span>
-          {tracking && (
-            <span className="font-mono text-[11px] text-text-subtle truncate">→ {tracking}</span>
-          )}
+    <div className="h-full flex flex-col bg-bg overflow-hidden">
+      {/* Header */}
+      <div className="shrink-0 px-6 pt-6 pb-5">
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-[20px] font-semibold text-text tracking-tight">Source Control</h1>
+          <div className="flex items-center gap-1">
+            <button onClick={loadHistory} className={cn('p-2 rounded-lg transition-colors', showHistory ? 'bg-accent/15 text-accent' : 'text-text-muted hover:text-text hover:bg-bg-hover')} title="Commit history">
+              <Clock size={15} />
+            </button>
+            <button onClick={() => refresh()} disabled={busy} className="p-2 rounded-lg text-text-muted hover:text-text hover:bg-bg-hover disabled:opacity-50 transition-colors" title="Refresh">
+              <RefreshCw size={15} className={busy ? 'animate-spin' : ''} />
+            </button>
+          </div>
         </div>
-        <button
-          onClick={() => refresh()}
-          disabled={busyOrChecking}
-          className="p-1.5 rounded-md text-text-muted hover:bg-bg-hover hover:text-text transition-colors disabled:opacity-50"
-          title="Refresh status"
-        >
-          <RefreshCw size={13} className={busy ? 'animate-spin' : ''} />
-        </button>
+
+        {/* Branch + Remote card */}
+        <div className="rounded-xl bg-bg-elevated border border-border p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-accent/10 flex items-center justify-center">
+                <GitBranch size={16} className="text-accent" />
+              </div>
+              <div>
+                <div className="font-mono text-[13px] font-semibold text-text">{branch ?? '...'}</div>
+                <div className="text-[11px] text-text-muted mt-0.5">
+                  {hasRemote ? (tracking ?? 'remote') : 'Local only'}
+                </div>
+              </div>
+            </div>
+            {hasRemote && (
+              <div className="flex items-center gap-1.5">
+                {synced ? (
+                  <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-500 text-[11px] font-medium">
+                    <Cloud size={12} /> Synced
+                  </div>
+                ) : (
+                  <>
+                    {behind > 0 && (
+                      <button onClick={onPull} disabled={busy} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-500/10 text-blue-400 text-[11px] font-semibold hover:bg-blue-500/20 transition-colors">
+                        <ArrowDown size={12} /> {behind}
+                      </button>
+                    )}
+                    {ahead > 0 && (
+                      <button onClick={onPush} disabled={busy} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 text-[11px] font-semibold hover:bg-emerald-500/20 transition-colors">
+                        <ArrowUp size={12} /> {ahead}
+                      </button>
+                    )}
+                  </>
+                )}
+                <button onClick={onFetch} disabled={busy || checking} className="p-1.5 rounded-lg text-text-subtle hover:text-text hover:bg-bg-hover text-[11px] transition-colors" title="Fetch remote">
+                  <RefreshCw size={12} className={checking ? 'animate-spin' : ''} />
+                </button>
+              </div>
+            )}
+            {!hasRemote && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-bg-hover text-text-subtle text-[11px]">
+                <CloudOff size={12} /> No remote
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* Commit box — only when there's something to commit. */}
-      {hasChanges && (
-        <div className="px-5 pt-4 pb-4 border-b border-border-subtle space-y-2.5">
-          <textarea
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            onKeyDown={(e) => {
-              if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-                e.preventDefault();
-                onCommit();
-              }
-            }}
-            placeholder="Message — what changed? (Cmd+Enter to commit)"
-            rows={2}
-            className="w-full px-2.5 py-2 bg-bg-elevated border border-border rounded-md text-[12.5px] text-text placeholder:text-text-subtle resize-none focus:outline-none focus:border-accent/40"
-          />
-          <button
-            onClick={onCommit}
-            disabled={!canCommit}
-            className="w-full px-3 py-2 bg-accent text-bg rounded-md text-[12.5px] font-medium hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors inline-flex items-center justify-center gap-1.5"
-          >
-            <GitCommit size={13} /> {commitLabel} {commitCount} change{commitCount === 1 ? '' : 's'}
-          </button>
+      {lastError && (
+        <div className="mx-6 mb-3 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20 text-[12px] text-red-400 flex items-start gap-2">
+          <AlertCircle size={13} className="mt-0.5 shrink-0" /><span className="break-words">{lastError}</span>
         </div>
       )}
 
-      {/* Sync — Pull + Push always side by side so both are one click away. */}
-      <div className="px-5 pt-4 pb-4 border-b border-border-subtle space-y-3">
-        {!hasRemote ? (
-          hasRepo && (
-            <p className="text-[11.5px] text-text-subtle leading-snug">
-              No remote yet. Add one in Terminal (<code>git remote add origin …</code>) to sync your
-              notes with GitHub.
-            </p>
-          )
-        ) : (
-          <>
-            <div className="grid grid-cols-2 gap-2">
-              <SyncButton
-                onClick={onPull}
-                disabled={busyOrChecking}
-                active={behind > 0}
-                icon={<ArrowDown size={14} />}
-                label="Pull"
-                count={behind}
-              />
-              <SyncButton
-                onClick={onPush}
-                disabled={busyOrChecking || ahead === 0}
-                active={ahead > 0}
-                icon={<ArrowUp size={14} />}
-                label="Push"
-                count={ahead}
-              />
+      {/* Commit section */}
+      {commitCount > 0 && (
+        <div className="shrink-0 px-6 pb-4">
+          <div className="rounded-xl bg-bg-elevated border border-border p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <GitCommit size={14} className="text-accent" />
+              <span className="text-[12px] font-semibold text-text">Commit</span>
+              <span className="text-[11px] text-text-muted">{stagedFiles.length ? `${stagedFiles.length} staged` : `${workingFiles.length} will be staged`}</span>
             </div>
-            <div className="flex items-center justify-between gap-2">
-              <span className="inline-flex items-center gap-1.5 text-[11.5px] min-w-0">
-                {synced ? (
-                  <span className="inline-flex items-center gap-1.5 text-emerald-500">
-                    <Check size={12} className="shrink-0" /> Up to date with {tracking ?? 'remote'}
-                  </span>
-                ) : (
-                  <span className="text-text-muted truncate">
-                    {ahead > 0 && `${ahead} to push`}
-                    {ahead > 0 && behind > 0 && ' · '}
-                    {behind > 0 && `${behind} to pull`}
-                  </span>
-                )}
-              </span>
-              <button
-                onClick={onCheckForUpdates}
-                disabled={busyOrChecking}
-                className="inline-flex items-center gap-1.5 text-[11.5px] text-text-subtle hover:text-text transition-colors disabled:opacity-50 shrink-0"
-                title="Fetch the latest from GitHub"
-              >
-                <RefreshCw size={11} className={checking ? 'animate-spin' : ''} />
-                {checking ? 'Checking…' : 'Check for updates'}
+            <textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); onCommit(); } }}
+              placeholder="Describe your changes..."
+              rows={2}
+              className="w-full px-3 py-2.5 bg-bg border border-border rounded-lg text-[12.5px] text-text placeholder:text-text-subtle resize-none focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/15 transition-all"
+            />
+            <div className="flex items-center justify-between mt-3">
+              <span className="text-[10.5px] text-text-subtle">Cmd+Enter to commit</span>
+              <button onClick={onCommit} disabled={!canCommit} className="px-4 py-2 bg-accent text-bg rounded-lg text-[12px] font-semibold hover:bg-accent-hover disabled:opacity-35 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5">
+                <Check size={13} strokeWidth={2.5} />
+                {stagedFiles.length ? 'Commit' : 'Commit all'}
               </button>
             </div>
-          </>
-        )}
-        {lastError && (
-          <p className="text-[11.5px] text-red-500 flex items-start gap-1.5">
-            <AlertCircle size={12} className="mt-0.5 shrink-0" />
-            <span className="break-words">{lastError}</span>
-          </p>
-        )}
-      </div>
+          </div>
+        </div>
+      )}
 
-      {/* File lists */}
-      <div className="flex-1 overflow-y-auto px-2 py-2">
-        {staged.length === 0 && working.length === 0 && (
-          <div className="h-full flex flex-col items-center justify-center gap-1.5 text-center px-6">
-            <Check size={20} className="text-text-subtle" />
-            <p className="text-[12.5px] text-text-muted">No local changes</p>
-            <p className="text-[11.5px] text-text-subtle leading-snug">
-              Everything is committed. Edit a note and changes show up here.
-            </p>
+      {/* Scrollable content */}
+      <div className="flex-1 overflow-y-auto px-6 pb-6">
+        {/* History */}
+        {showHistory && (
+          <div className="mb-4 rounded-xl bg-bg-elevated border border-border overflow-hidden">
+            <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Recent commits</span>
+              <button onClick={() => setShowHistory(false)} className="p-0.5 rounded text-text-muted hover:text-text"><X size={12} /></button>
+            </div>
+            <div className="max-h-[260px] overflow-y-auto">
+              {historyLoading ? (
+                <div className="px-4 py-4 text-[12px] text-text-subtle">Loading...</div>
+              ) : historyLog.length === 0 ? (
+                <div className="px-4 py-4 text-[12px] text-text-subtle">No commits yet.</div>
+              ) : (
+                <div className="divide-y divide-border-subtle">
+                  {historyLog.map((c) => (
+                    <div key={c.hash} className="px-4 py-3 hover:bg-bg-hover/50 transition-colors">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-mono text-[10px] font-bold text-accent bg-accent/10 px-1.5 py-0.5 rounded">{c.hash}</span>
+                        <span className="text-[10.5px] text-text-subtle">{formatDate(c.date)}</span>
+                      </div>
+                      <div className="text-[12px] text-text leading-snug">{c.message}</div>
+                      <div className="text-[10.5px] text-text-subtle mt-0.5">{c.author}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
-        {staged.length > 0 && (
-          <Section
-            label={`Staged (${staged.length})`}
-            action={
-              <button
-                onClick={() => unstage(staged.map((f) => f.path))}
-                disabled={busy}
-                className="text-text-subtle hover:text-text transition-colors p-0.5"
-                title="Unstage all"
-              >
-                <Minus size={12} />
-              </button>
-            }
-          >
-            {staged.map((f) => (
-              <FileRow
-                key={'s:' + f.path}
-                file={f}
-                staged
-                onPrimary={() => unstage([f.path])}
-                primaryIcon={<Minus size={12} />}
-                primaryTitle="Unstage"
+        {/* File changes */}
+        {stagedFiles.length === 0 && workingFiles.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center mb-3">
+              <Check size={22} className="text-emerald-500" strokeWidth={2.5} />
+            </div>
+            <p className="text-[14px] font-semibold text-text">Working tree clean</p>
+            <p className="text-[12px] text-text-muted mt-1">No uncommitted changes.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {stagedFiles.length > 0 && (
+              <FileSection
+                title="Staged" count={stagedFiles.length} files={stagedFiles} staged
+                action={() => unstage(stagedFiles.map((f) => f.path))} actionLabel="Unstage all"
+                onFileAction={(f) => unstage([f.path])} fileActionIcon={<Minus size={12} />} fileActionTitle="Unstage"
+                onDiff={loadDiff} activeDiff={diffFile}
               />
-            ))}
-          </Section>
+            )}
+            {workingFiles.length > 0 && (
+              <FileSection
+                title="Changes" count={workingFiles.length} files={workingFiles} staged={false}
+                action={() => stage(workingFiles.map((f) => f.path))} actionLabel="Stage all"
+                onFileAction={(f) => stage([f.path])} fileActionIcon={<Plus size={12} />} fileActionTitle="Stage"
+                onSecondary={onDiscard} secondaryIcon={<RotateCcw size={12} />} secondaryTitle="Discard"
+                onDiff={loadDiff} activeDiff={diffFile}
+              />
+            )}
+          </div>
         )}
 
-        {working.length > 0 && (
-          <Section
-            label={`Changes (${working.length})`}
-            action={
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => stage(working.map((f) => f.path))}
-                  disabled={busy}
-                  className="text-text-subtle hover:text-text transition-colors p-0.5"
-                  title="Stage all"
-                >
-                  <Plus size={12} />
-                </button>
+        {/* Diff viewer */}
+        {diffFile && (
+          <div className="mt-4 rounded-xl bg-bg-elevated border border-border overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-bg-hover/30">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded', diffFile.staged ? 'bg-emerald-500/15 text-emerald-500' : 'bg-amber-500/15 text-amber-500')}>
+                  {diffFile.staged ? 'STAGED' : 'WORKING'}
+                </span>
+                <span className="text-[11.5px] font-mono text-text truncate">{diffFile.path}</span>
               </div>
-            }
-          >
-            {working.map((f) => (
-              <FileRow
-                key={'w:' + f.path}
-                file={f}
-                staged={false}
-                onPrimary={() => stage([f.path])}
-                primaryIcon={<Plus size={12} />}
-                primaryTitle="Stage"
-                onSecondary={() => onDiscard(f)}
-                secondaryIcon={<RotateCcw size={12} />}
-                secondaryTitle="Discard"
-              />
-            ))}
-          </Section>
+              <button onClick={() => setDiffFile(null)} className="p-1 rounded text-text-muted hover:text-text hover:bg-bg-hover"><X size={13} /></button>
+            </div>
+            <div className="max-h-[350px] overflow-auto">
+              {diffLoading ? (
+                <div className="px-4 py-6 text-[12px] text-text-subtle text-center">Loading diff...</div>
+              ) : (
+                <pre className="text-[11px] font-mono leading-[1.7] py-2">
+                  {diffContent.split('\n').map((line, i) => (
+                    <div key={i} className={cn(
+                      'px-4 min-h-[1.7em]',
+                      line.startsWith('+') && !line.startsWith('+++') && 'bg-emerald-500/8 text-emerald-400 border-l-2 border-emerald-500/40',
+                      line.startsWith('-') && !line.startsWith('---') && 'bg-red-500/8 text-red-400 border-l-2 border-red-500/40',
+                      line.startsWith('@@') && 'text-blue-400 bg-blue-500/5 border-l-2 border-blue-500/30 font-semibold',
+                      line.startsWith('diff') && 'text-text-muted font-semibold border-l-2 border-transparent',
+                      !line.startsWith('+') && !line.startsWith('-') && !line.startsWith('@@') && !line.startsWith('diff') && 'text-text-muted border-l-2 border-transparent',
+                    )}>
+                      {line || ' '}
+                    </div>
+                  ))}
+                </pre>
+              )}
+            </div>
+          </div>
         )}
       </div>
     </div>
   );
 }
 
-function SyncButton({
-  onClick,
-  disabled,
-  active,
-  icon,
-  label,
-  count,
-}: {
-  onClick: () => void;
-  disabled: boolean;
-  active: boolean;
-  icon: React.ReactNode;
-  label: string;
-  count: number;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={cn(
-        'px-3 py-2 rounded-md text-[12.5px] font-medium transition-colors inline-flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed',
-        active
-          ? 'bg-accent text-bg hover:bg-accent-hover'
-          : 'border border-border text-text-muted hover:bg-bg-hover hover:text-text'
-      )}
-    >
-      {icon}
-      {label}
-      {count > 0 && (
-        <span
-          className={cn(
-            'ml-0.5 px-1.5 rounded-full text-[10.5px] font-semibold tabular-nums',
-            active ? 'bg-bg/25 text-bg' : 'bg-bg-hover text-text-muted'
-          )}
-        >
-          {count}
-        </span>
-      )}
-    </button>
-  );
-}
+// ─── File section ────────────────────────────────────────────────────────────
 
-function Section({
-  label,
-  action,
-  children,
-}: {
-  label: string;
-  action?: React.ReactNode;
-  children: React.ReactNode;
+function FileSection({ title, count, files, staged, action, actionLabel, onFileAction, fileActionIcon, fileActionTitle, onSecondary, secondaryIcon, secondaryTitle, onDiff, activeDiff }: {
+  title: string; count: number; files: GitFileEntry[]; staged: boolean;
+  action: () => void; actionLabel: string;
+  onFileAction: (f: GitFileEntry) => void; fileActionIcon: React.ReactNode; fileActionTitle: string;
+  onSecondary?: (f: GitFileEntry) => void; secondaryIcon?: React.ReactNode; secondaryTitle?: string;
+  onDiff: (path: string, staged: boolean) => void; activeDiff: { path: string; staged: boolean } | null;
 }) {
+  const [expanded, setExpanded] = useState(true);
   return (
-    <div className="mb-2">
-      <div className="flex items-center justify-between px-2 pt-2 pb-1 font-mono text-[10px] uppercase tracking-[0.1em] text-text-subtle">
-        <span>{label}</span>
-        {action}
-      </div>
-      <div>{children}</div>
-    </div>
-  );
-}
-
-function FileRow({
-  file,
-  staged,
-  onPrimary,
-  primaryIcon,
-  primaryTitle,
-  onSecondary,
-  secondaryIcon,
-  secondaryTitle,
-}: {
-  file: GitFileEntry;
-  staged: boolean;
-  onPrimary: () => void;
-  primaryIcon: React.ReactNode;
-  primaryTitle: string;
-  onSecondary?: () => void;
-  secondaryIcon?: React.ReactNode;
-  secondaryTitle?: string;
-}) {
-  const openFile = useVault((s) => s.openFile);
-  const letter = statusLetter(file, staged);
-  const color = statusColor(letter);
-  const dir = file.path.includes('/') ? file.path.slice(0, file.path.lastIndexOf('/')) : '';
-  const base = file.path.split('/').pop() ?? file.path;
-
-  return (
-    <div className="group flex items-center gap-2 px-2 py-1 rounded-md hover:bg-bg-hover">
-      <button
-        onClick={() => openFile(file.path)}
-        className="flex items-center gap-2 flex-1 min-w-0 text-left"
-        title={`Open ${file.path}`}
-      >
-        <FileText size={12} className="text-text-subtle shrink-0" />
-        <span className="text-[12.5px] text-text truncate">{base}</span>
-        {dir && <span className="text-[11px] text-text-subtle truncate">{dir}</span>}
-      </button>
-      <span className={cn('font-mono text-[11px] w-3 text-center', color)}>{letter}</span>
-      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-        {onSecondary && (
-          <button
-            onClick={onSecondary}
-            className="p-1 rounded text-text-subtle hover:bg-bg hover:text-text"
-            title={secondaryTitle}
-          >
-            {secondaryIcon}
-          </button>
-        )}
-        <button
-          onClick={onPrimary}
-          className="p-1 rounded text-text-subtle hover:bg-bg hover:text-text"
-          title={primaryTitle}
-        >
-          {primaryIcon}
+    <div className="rounded-xl bg-bg-elevated border border-border overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-border-subtle">
+        <button onClick={() => setExpanded((v) => !v)} className="flex items-center gap-2 text-[11.5px] font-semibold uppercase tracking-wider text-text-muted hover:text-text transition-colors">
+          {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+          {title}
+          <span className="font-mono text-[11px] font-bold bg-bg-hover px-1.5 py-0.5 rounded-md">{count}</span>
         </button>
+        <button onClick={action} className="text-[11px] text-text-subtle hover:text-accent font-medium transition-colors">{actionLabel}</button>
       </div>
+      {expanded && (
+        <div className="divide-y divide-border-subtle">
+          {files.map((f) => {
+            const letter = statusLetter(f, staged);
+            const isActive = activeDiff?.path === f.path && activeDiff?.staged === staged;
+            return (
+              <div key={f.path} className={cn('group flex items-center gap-2.5 px-4 py-2.5 transition-colors cursor-pointer', isActive ? 'bg-accent/5' : 'hover:bg-bg-hover/50')} onClick={() => onDiff(f.path, staged)}>
+                <span className={cn('font-mono text-[10px] font-bold w-5 h-5 rounded-md flex items-center justify-center shrink-0', statusBg(letter))}>{letter}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[12.5px] text-text truncate">{f.path.split('/').pop()}</div>
+                  {f.path.includes('/') && <div className="text-[10.5px] text-text-subtle truncate">{f.path.slice(0, f.path.lastIndexOf('/'))}</div>}
+                </div>
+                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                  {onSecondary && <button onClick={() => onSecondary(f)} className="p-1.5 rounded-md text-text-subtle hover:text-red-400 hover:bg-red-500/10 transition-colors" title={secondaryTitle}>{secondaryIcon}</button>}
+                  <button onClick={() => onFileAction(f)} className="p-1.5 rounded-md text-text-subtle hover:text-accent hover:bg-accent/10 transition-colors" title={fileActionTitle}>{fileActionIcon}</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
+}
+
+function formatDate(iso: string): string {
+  try {
+    const d = new Date(iso);
+    const diff = Date.now() - d.getTime();
+    if (diff < 60_000) return 'just now';
+    if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+    if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+    if (diff < 604_800_000) return `${Math.floor(diff / 86_400_000)}d ago`;
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  } catch { return iso; }
 }

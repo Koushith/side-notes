@@ -104,6 +104,8 @@ function createWindow() {
       sandbox: false,
       // Enable Chromium's built-in PDF viewer for in-tab PDF rendering. No extra deps.
       plugins: true,
+      // Allow <webview> tags in the renderer for the spatial browser canvas.
+      webviewTag: true,
     },
   });
 
@@ -260,8 +262,7 @@ app.whenReady().then(() => {
           // Fonts are bundled into the renderer, so the production CSP has no
           // remote allow-list — the app makes zero outbound network requests.
           'Content-Security-Policy': [
-            // blob: + worker-src are needed by Excalidraw (embedded images, export, web workers).
-            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: vault:; connect-src 'self' blob:; worker-src 'self' blob:;",
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: vault:; connect-src 'self' blob:; worker-src 'self' blob:; frame-src *;",
           ],
         },
       });
@@ -276,6 +277,16 @@ app.whenReady().then(() => {
   });
   session.defaultSession.setPermissionCheckHandler((_wc, permission) => {
     return permission === 'media';
+  });
+
+  // Allow webview tags to attach (spatial browser on canvas).
+  app.on('web-contents-created', (_event, contents) => {
+    contents.on('will-attach-webview', (_e, webPreferences, _params) => {
+      // Strip away dangerous preferences but allow the webview to load
+      delete (webPreferences as Record<string, unknown>).preload;
+      webPreferences.nodeIntegration = false;
+      webPreferences.contextIsolation = true;
+    });
   });
 
   createWindow();
@@ -363,11 +374,15 @@ ipcMain.handle('vault:close', async () => {
 const INDEXED_EXTS = new Set([
   // Markdown variants — all editable in the markdown editor.
   '.md', '.markdown', '.mdx', '.mdown', '.mkd', '.mkdn', '.mdwn',
-  '.canvas', '.base',
-  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp',
+  '.canvas', '.base', '.excalidraw',
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.avif',
   '.pdf', '.pen',
   '.mp3', '.mp4', '.webm', '.ogg', '.wav', '.m4a', '.mov',
   '.csv', '.json', '.html', '.txt',
+  // Code / config files
+  '.ts', '.tsx', '.js', '.jsx', '.py', '.rs', '.go', '.rb', '.java',
+  '.css', '.scss', '.yaml', '.yml', '.toml', '.xml', '.sh', '.zsh',
+  '.sql', '.graphql', '.env', '.gitignore', '.dockerfile',
 ]);
 
 async function walkVault(root: string): Promise<{ path: string; rel: string; mtime: number }[]> {
@@ -710,6 +725,42 @@ ipcMain.handle('git:fetch', async (_e, vaultPath: string): Promise<GitVoid> => {
     return { ok: true };
   } catch (e) {
     return gitErr(e);
+  }
+});
+
+ipcMain.handle('git:diff', async (_e, vaultPath: string, filePath: string, staged: boolean): Promise<GitResult<{ diff: string }>> => {
+  try {
+    const git = gitFor(vaultPath);
+    const args = staged ? ['diff', '--cached', '--', filePath] : ['diff', '--', filePath];
+    const diff = await git.raw(args);
+    if (diff) return { ok: true, diff };
+    // Untracked or newly added files won't have a diff. Show as new file with /dev/null.
+    try {
+      const fullPath = path.join(vaultPath, filePath);
+      const content = await fs.readFile(fullPath, 'utf-8');
+      const lines = content.split('\n').map((l) => `+${l}`).join('\n');
+      return { ok: true, diff: `--- /dev/null\n+++ b/${filePath}\n@@ -0,0 +1,${content.split('\n').length} @@\n${lines}` };
+    } catch {
+      return { ok: true, diff: '(binary or unreadable file)' };
+    }
+  } catch (e) {
+    return gitErr(e) as { ok: false; error: string } & { diff?: string };
+  }
+});
+
+ipcMain.handle('git:log', async (_e, vaultPath: string, count: number): Promise<GitResult<{ log: { hash: string; message: string; date: string; author: string }[] }>> => {
+  try {
+    const git = gitFor(vaultPath);
+    const result = await git.log({ maxCount: count || 20 });
+    const log = result.all.map((c) => ({
+      hash: c.hash.slice(0, 7),
+      message: c.message,
+      date: c.date,
+      author: c.author_name,
+    }));
+    return { ok: true, log };
+  } catch (e) {
+    return gitErr(e) as { ok: false; error: string } & { log?: unknown };
   }
 });
 

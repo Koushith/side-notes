@@ -1,7 +1,27 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Sigma from 'sigma';
 import { NodeCircleProgram } from 'sigma/rendering';
-import Graph from 'graphology';
+import GraphConstructor from 'graphology';
+
+// graphology's TypeScript definitions export an abstract class that doesn't expose
+// instance methods in strict mode. The runtime class has them all. Cast once here.
+const Graph = GraphConstructor as unknown as new (opts?: { multi?: boolean; type?: string }) => {
+  addNode(key: string, attrs?: Record<string, unknown>): string;
+  addEdge(source: string, target: string, attrs?: Record<string, unknown>): string;
+  dropNode(key: string): void;
+  hasNode(key: string): boolean;
+  hasEdge(source: string, target: string): boolean;
+  nodes(): string[];
+  edges(): string[];
+  extremities(edge: string): [string, string];
+  neighbors(node: string): string[];
+  order: number;
+  size: number;
+  getNodeAttribute(node: string, attr: string): any;
+  setNodeAttribute(node: string, attr: string, value: unknown): void;
+  removeNodeAttribute(node: string, attr: string): void;
+  forEachNode(callback: (node: string) => void): void;
+};
 import forceAtlas2 from 'graphology-layout-forceatlas2';
 import louvain from 'graphology-communities-louvain';
 import { bidirectional } from 'graphology-shortest-path/unweighted';
@@ -82,7 +102,7 @@ interface Particle {
   target: string;
 }
 
-function createParticles(graph: Graph, count: number): Particle[] {
+function createParticles(graph: InstanceType<typeof Graph>, count: number): Particle[] {
   const edges = graph.edges();
   if (edges.length === 0) return [];
   const particles: Particle[] = [];
@@ -113,7 +133,7 @@ export function GraphView() {
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sigmaRef = useRef<Sigma | null>(null);
-  const graphRef = useRef<Graph | null>(null);
+  const graphRef = useRef<InstanceType<typeof Graph> | null>(null);
   const particleCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Rendering-only state kept in refs so changes don't rebuild the graph
