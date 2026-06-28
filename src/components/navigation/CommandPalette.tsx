@@ -4,8 +4,8 @@ import { useVault } from '@/stores/vault';
 import { useUi } from '@/stores/ui';
 import { useOnboarding } from '@/stores/onboarding';
 import { cn, basenameNoExt } from '@/lib/utils';
-import { promptUser } from './PromptDialog';
-import { toast } from './Toast';
+import { promptUser } from '../modals/PromptDialog';
+import { toast } from '../shared/Toast';
 
 interface Props {
   open: boolean;

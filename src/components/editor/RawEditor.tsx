@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useVault } from '@/stores/vault';
 import { api } from '@/lib/api';
 import { joinPath, basenameNoExt } from '@/lib/utils';
-import { ViewModeTabs } from './ViewModeTabs';
+import { ViewModeTabs } from '../shared/ViewModeTabs';
 
 interface Props {
   rel: string;

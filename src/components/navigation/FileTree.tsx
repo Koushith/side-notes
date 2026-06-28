@@ -24,10 +24,10 @@ import { useVault } from '@/stores/vault';
 import { cn, basenameNoExt, joinPath, MARKDOWN_EXT_RE } from '@/lib/utils';
 import { api } from '@/lib/api';
 import type { FileTreeNode } from '@/types';
-import { ContextMenu, MenuSection } from './ContextMenu';
-import { promptUser } from './PromptDialog';
-import { confirmUser } from './ConfirmDialog';
-import { toast } from './Toast';
+import { ContextMenu, MenuSection } from '../shared/ContextMenu';
+import { promptUser } from '../modals/PromptDialog';
+import { confirmUser } from '../modals/ConfirmDialog';
+import { toast } from '../shared/Toast';
 
 interface CreatingState {
   kind: 'file' | 'folder' | 'drawing';

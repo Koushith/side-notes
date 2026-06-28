@@ -15,7 +15,7 @@ import {
   Highlighter,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { promptUser } from './PromptDialog';
+import { promptUser } from '../modals/PromptDialog';
 
 interface Props {
   editor: Editor;

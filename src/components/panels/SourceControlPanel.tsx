@@ -6,8 +6,8 @@ import {
 } from 'lucide-react';
 import { useGit } from '@/stores/git';
 import { useVault } from '@/stores/vault';
-import { confirmUser } from './ConfirmDialog';
-import { toast } from './Toast';
+import { confirmUser } from '../modals/ConfirmDialog';
+import { toast } from '../shared/Toast';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
 import type { GitFileEntry } from '@/types';

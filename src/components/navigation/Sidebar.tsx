@@ -19,10 +19,10 @@ import { useVault } from '@/stores/vault';
 import { useGit } from '@/stores/git';
 import { useUi } from '@/stores/ui';
 import { FileTree } from './FileTree';
-import { TagPanel } from './TagPanel';
+import { TagPanel } from '../panels/TagPanel';
 import { cn } from '@/lib/utils';
-import { promptUser } from './PromptDialog';
-import { toast } from './Toast';
+import { promptUser } from '../modals/PromptDialog';
+import { toast } from '../shared/Toast';
 
 interface Props {
   onOpenPalette: () => void;

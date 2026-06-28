@@ -20,10 +20,10 @@ import {
 import { useVault } from '@/stores/vault';
 import { useTheme } from '@/stores/theme';
 import { useUi } from '@/stores/ui';
-import { ThemePicker } from './ThemePicker';
+import { ThemePicker } from '../shared/ThemePicker';
 import { cn } from '@/lib/utils';
 import { exportHtml, exportMarkdown, exportPdf } from '@/lib/export';
-import { toast } from './Toast';
+import { toast } from '../shared/Toast';
 
 interface Props {
   onOpenPalette: () => void;

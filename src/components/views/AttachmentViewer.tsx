@@ -3,7 +3,7 @@ import { ExternalLink, Maximize2, Minimize2, Copy } from 'lucide-react';
 import { useVault } from '@/stores/vault';
 import { api } from '@/lib/api';
 import { basenameNoExt, cn, isPdfPath, joinPath } from '@/lib/utils';
-import { toast } from './Toast';
+import { toast } from '../shared/Toast';
 
 interface Props {
   rel: string;

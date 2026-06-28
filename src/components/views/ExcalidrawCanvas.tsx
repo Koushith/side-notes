@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 import { joinPath } from '@/lib/utils';
 import { useTheme } from '@/stores/theme';
-import { toast } from './Toast';
+import { toast } from '../shared/Toast';
 
 // Minimal shape of the imperative API we use — avoids depending on Excalidraw's
 // type-export path (which has moved between versions).

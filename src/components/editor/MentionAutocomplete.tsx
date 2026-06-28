@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { FileText, Hash, Calendar } from 'lucide-react';
 import type { Editor as TiptapEditor } from '@tiptap/core';
-import type { MentionSuggestState, MentionKind } from './extensions/MentionSuggest';
-import { commitMention } from './extensions/MentionSuggest';
+import type { MentionSuggestState, MentionKind } from '../extensions/MentionSuggest';
+import { commitMention } from '../extensions/MentionSuggest';
 import type { VaultFile } from '@/types';
 import { cn } from '@/lib/utils';
 

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { FileText, Plus } from 'lucide-react';
 import type { Editor as TiptapEditor } from '@tiptap/core';
-import type { WikilinkSuggestState } from './extensions/WikilinkSuggest';
-import { commitWikilink } from './extensions/WikilinkSuggest';
+import type { WikilinkSuggestState } from '../extensions/WikilinkSuggest';
+import { commitWikilink } from '../extensions/WikilinkSuggest';
 import type { VaultFile } from '@/types';
 import { cn, MARKDOWN_EXT_RE, stripMarkdownExt } from '@/lib/utils';
 
