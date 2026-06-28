@@ -27,7 +27,7 @@ export function EditorBubbleMenu({ editor }: Props) {
   return (
     <BubbleMenu
       editor={editor}
-      tippyOptions={{ duration: 100, animation: 'shift-away' }}
+      tippyOptions={{ duration: 100, animation: 'shift-away', arrow: false, maxWidth: 'none' }}
       shouldShow={({ editor, from, to }) => {
         if (from === to) return false;
         if (editor.isActive('codeBlock')) return false;
