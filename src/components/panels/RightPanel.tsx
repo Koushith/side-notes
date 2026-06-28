@@ -6,9 +6,11 @@ const COLLAPSED_KEY = 'side.rightpanel.collapsed';
 
 function readCollapsed(): boolean {
   try {
-    return localStorage.getItem(COLLAPSED_KEY) === '1';
+    const val = localStorage.getItem(COLLAPSED_KEY);
+    if (val === null) return true;
+    return val === '1';
   } catch {
-    return false;
+    return true;
   }
 }
 
