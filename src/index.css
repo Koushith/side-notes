@@ -318,6 +318,16 @@
     cursor: col-resize;
   }
 
+  /* Bubble menu — needs to pop over both light and dark backgrounds */
+  .bubble-menu {
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.12);
+  }
+  [data-mode="dark"] .bubble-menu {
+    background: #2a2826;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+  }
+
   /* Code block syntax highlighting — Side palette: purple keys, sage strings, terracotta numbers */
   .ProseMirror pre code .hljs-keyword,
   .ProseMirror pre code .hljs-selector-tag,
