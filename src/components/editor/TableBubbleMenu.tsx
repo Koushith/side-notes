@@ -23,9 +23,11 @@ export function TableBubbleMenu({ editor }: Props) {
         animation: 'shift-away',
         placement: 'top',
         offset: [0, 10],
+        arrow: false,
+        maxWidth: 'none',
       }}
       shouldShow={({ editor, from, to }) => editor.isActive('table') && from === to}
-      className="flex items-center gap-0.5 rounded-lg border border-border bg-bg-elevated shadow-2xl px-1 py-1"
+      className="bubble-menu flex items-center gap-0.5 px-1 py-1 w-max"
     >
       <IconBtn
         title="Add row above"
