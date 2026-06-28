@@ -33,7 +33,7 @@ export function EditorBubbleMenu({ editor }: Props) {
         if (editor.isActive('codeBlock')) return false;
         return true;
       }}
-      className="bubble-menu flex items-center gap-0.5 rounded-lg shadow-2xl px-1 py-1 w-max"
+      className="bubble-menu flex items-center gap-0.5 px-1 py-1 w-max"
     >
       <ToolButton
         active={isActive('heading', { level: 1 })}

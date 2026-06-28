@@ -318,14 +318,20 @@
     cursor: col-resize;
   }
 
-  /* Bubble menu — needs to pop over both light and dark backgrounds */
-  .bubble-menu {
+  /* Bubble menu — override tippy's default dark box */
+  .tippy-box:has(.bubble-menu) {
     background: #fff;
     border: 1px solid rgba(0, 0, 0, 0.12);
+    border-radius: 10px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
   }
-  [data-mode="dark"] .bubble-menu {
+  .tippy-box:has(.bubble-menu) > .tippy-content {
+    padding: 0;
+  }
+  [data-mode="dark"] .tippy-box:has(.bubble-menu) {
     background: #2a2826;
     border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
   }
 
   /* Code block syntax highlighting — Side palette: purple keys, sage strings, terracotta numbers */
