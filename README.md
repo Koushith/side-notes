@@ -108,7 +108,17 @@ side-deck/
 └── README.md
 ```
 
-## Run the desktop app
+## Install
+
+Download **SideNotes.app.zip** from the [latest release](https://github.com/Koushith/side-deck/releases/latest), unzip, and move to `/Applications`.
+
+First launch is blocked by Gatekeeper (ad-hoc signed, not notarized). Right-click the app, click Open, then Open again. Or run:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/SideNotes.app
+```
+
+## Run the desktop app (dev)
 
 ```bash
 npm install
