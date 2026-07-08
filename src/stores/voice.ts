@@ -30,6 +30,8 @@ interface VoiceState {
   saveSettings: (update: VoiceSettingsUpdate) => Promise<VoiceSettingsView | null>;
   /** Current mic level 0..1 for the waveform; 0 when not recording. */
   getLevel: () => number;
+  /** Frequency band amplitudes (0..1) for real audio visualization. */
+  getFrequencies: (bandCount: number) => number[] | null;
   start: () => Promise<void>;
   stopAndTranscribe: () => Promise<void>;
   cancel: () => void;
@@ -110,6 +112,10 @@ export const useVoice = create<VoiceState>((set, get) => ({
 
   getLevel() {
     return get().status === 'recording' && handle ? handle.level() : 0;
+  },
+
+  getFrequencies(bandCount: number) {
+    return get().status === 'recording' && handle ? handle.frequencies(bandCount) : null;
   },
 
   async start() {

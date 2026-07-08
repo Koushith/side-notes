@@ -11,6 +11,8 @@ export interface Recording {
 export interface RecorderHandle {
   /** Current input level, 0..1, sampled from an analyser. Drives the waveform. */
   level: () => number;
+  /** Frequency band levels (0..1) for visualization. Returns an array of normalized amplitudes. */
+  frequencies: (bandCount: number) => number[];
   /** Stop and resolve with the captured audio. */
   stop: () => Promise<Recording>;
   /** Abort without producing a recording (releases the mic). */
@@ -46,9 +48,11 @@ export async function startRecording(): Promise<RecorderHandle> {
   const audioCtx = new AudioContext();
   const source = audioCtx.createMediaStreamSource(stream);
   const analyser = audioCtx.createAnalyser();
-  analyser.fftSize = 512;
+  analyser.fftSize = 256;
+  analyser.smoothingTimeConstant = 0.6;
   source.connect(analyser);
   const buf = new Uint8Array(analyser.fftSize);
+  const freqBuf = new Uint8Array(analyser.frequencyBinCount);
 
   recorder.start();
 
@@ -65,8 +69,23 @@ export async function startRecording(): Promise<RecorderHandle> {
         const v = (buf[i] - 128) / 128;
         sum += v * v;
       }
-      // RMS, lightly boosted so quiet speech still moves the bars.
       return Math.min(1, Math.sqrt(sum / buf.length) * 3);
+    },
+    frequencies(bandCount: number) {
+      analyser.getByteFrequencyData(freqBuf);
+      const bands: number[] = [];
+      const binCount = freqBuf.length;
+      const binsPerBand = Math.floor(binCount / bandCount);
+      for (let b = 0; b < bandCount; b++) {
+        let sum = 0;
+        const start = b * binsPerBand;
+        const end = Math.min(start + binsPerBand, binCount);
+        for (let i = start; i < end; i++) {
+          sum += freqBuf[i];
+        }
+        bands.push(Math.min(1, (sum / (end - start)) / 180));
+      }
+      return bands;
     },
     stop() {
       return new Promise<Recording>((resolve) => {

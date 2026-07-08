@@ -3,7 +3,7 @@ import { Mic, Loader2, X } from 'lucide-react';
 import { useVoice, getVoiceHotkey } from '@/stores/voice';
 import { cn } from '@/lib/utils';
 
-const BARS = 24;
+const BARS = 32;
 
 export function VoiceDictation() {
   const status = useVoice((s) => s.status);
@@ -15,7 +15,7 @@ export function VoiceDictation() {
   const loadSettings = useVoice((s) => s.settings);
   const load = useVoice((s) => s.loadSettings);
 
-  const [levels, setLevels] = useState<number[]>(() => new Array(BARS).fill(0));
+  const [bands, setBands] = useState<number[]>(() => new Array(BARS).fill(0));
   const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -25,12 +25,12 @@ export function VoiceDictation() {
   useEffect(() => {
     if (status !== 'recording') {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      setLevels(new Array(BARS).fill(0));
+      setBands(new Array(BARS).fill(0));
       return;
     }
     const tick = () => {
-      const lvl = useVoice.getState().getLevel();
-      setLevels((prev) => [...prev.slice(1), lvl]);
+      const freqs = useVoice.getState().getFrequencies(BARS);
+      if (freqs) setBands(freqs);
       rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
@@ -112,23 +112,19 @@ export function VoiceDictation() {
             <span className="relative rounded-full h-2.5 w-2.5 bg-red-500" />
           </span>
 
-          {/* Waveform */}
-          <div className="flex h-5 items-center gap-[1.5px]">
-            {levels.map((l, i) => {
-              const center = BARS / 2;
-              const dist = Math.abs(i - center) / center;
-              const emphasis = 1 - dist * 0.4;
-              return (
-                <span
-                  key={i}
-                  className="w-[2px] rounded-full bg-accent transition-[height] duration-75"
-                  style={{
-                    height: `${Math.max(2, l * 20 * emphasis)}px`,
-                    opacity: 0.4 + l * 0.6,
-                  }}
-                />
-              );
-            })}
+          {/* Real-time frequency visualization */}
+          <div className="flex h-7 items-end gap-[1px]">
+            {bands.map((amp, i) => (
+              <span
+                key={i}
+                className="w-[2.5px] rounded-full bg-accent"
+                style={{
+                  height: `${Math.max(2, amp * 28)}px`,
+                  opacity: 0.35 + amp * 0.65,
+                  transition: 'height 60ms ease-out, opacity 60ms ease-out',
+                }}
+              />
+            ))}
           </div>
 
           {/* Stop button */}
