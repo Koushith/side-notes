@@ -101,6 +101,94 @@ export function getModelsDir(): string {
   return dir;
 }
 
+export function getBinDir(): string {
+  const dir = join(app.getPath('userData'), 'bin');
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+const WHISPER_CPP_BINARY_URL =
+  process.arch === 'arm64'
+    ? 'https://github.com/ggerganov/whisper.cpp/releases/download/v1.7.5/whisper-v1.7.5-bin-darwin-arm64.zip'
+    : 'https://github.com/ggerganov/whisper.cpp/releases/download/v1.7.5/whisper-v1.7.5-bin-darwin-x86_64.zip';
+
+export function getWhisperBinaryPath(): string {
+  return join(getBinDir(), 'whisper-cli');
+}
+
+export function isWhisperBinaryInstalled(): boolean {
+  return existsSync(getWhisperBinaryPath());
+}
+
+export async function downloadWhisperBinary(
+  onProgress?: (msg: string) => void
+): Promise<string> {
+  const binDir = getBinDir();
+  const binPath = getWhisperBinaryPath();
+  if (existsSync(binPath)) return binPath;
+
+  onProgress?.('Downloading whisper engine...');
+
+  const zipPath = join(binDir, 'whisper-cpp.zip');
+
+  // Download the zip
+  await new Promise<void>((resolve, reject) => {
+    const doRequest = (url: string) => {
+      const lib = url.startsWith('https') ? https : http;
+      const req = lib.get(url, { headers: { 'User-Agent': 'SideNotes/1.0' } }, (res) => {
+        if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          doRequest(res.headers.location);
+          return;
+        }
+        if (!res.statusCode || res.statusCode >= 400) {
+          reject(new Error(`Failed to download whisper binary: HTTP ${res.statusCode}`));
+          return;
+        }
+        const file = createWriteStream(zipPath);
+        res.pipe(file);
+        file.on('finish', () => file.close(() => resolve()));
+        file.on('error', reject);
+      });
+      req.on('error', reject);
+    };
+    doRequest(WHISPER_CPP_BINARY_URL);
+  });
+
+  onProgress?.('Extracting whisper engine...');
+
+  // Extract the zip using macOS built-in unzip
+  const { execSync } = require('child_process');
+  execSync(`unzip -o "${zipPath}" -d "${binDir}"`, { stdio: 'ignore' });
+
+  // Find the whisper binary in the extracted contents
+  const { readdirSync: readdir } = require('fs');
+  const extractedFiles = readdir(binDir, { recursive: true }) as string[];
+  const whisperFile = extractedFiles.find(
+    (f: string) => f.endsWith('/whisper-cli') || f === 'whisper-cli' || f.endsWith('/main') || f === 'main'
+  );
+
+  if (whisperFile) {
+    const extractedPath = join(binDir, whisperFile);
+    if (extractedPath !== binPath) {
+      const { copyFileSync } = require('fs');
+      copyFileSync(extractedPath, binPath);
+    }
+  }
+
+  // Make executable
+  const { chmodSync } = require('fs');
+  try { chmodSync(binPath, 0o755); } catch {}
+
+  // Cleanup zip
+  try { unlinkSync(zipPath); } catch {}
+
+  if (!existsSync(binPath)) {
+    throw new Error('Failed to extract whisper binary. Try installing manually: brew install whisper-cpp');
+  }
+
+  return binPath;
+}
+
 export function isModelDownloaded(modelId: string): boolean {
   const model = WHISPER_MODELS.find((m) => m.id === modelId);
   if (!model) return false;

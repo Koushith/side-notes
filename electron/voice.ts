@@ -147,39 +147,20 @@ async function transcribeWhisperCpp(o: LocalTranscribeOptions): Promise<string> 
   }
   writeFileSync(wavPath, buffer);
 
+  // Auto-download whisper.cpp binary if not present
+  const { isWhisperBinaryInstalled, downloadWhisperBinary, getWhisperBinaryPath } = await import('./whisperModels');
+
+  if (!isWhisperBinaryInstalled()) {
+    o.onProgress?.('Setting up whisper engine (one-time)...');
+    await downloadWhisperBinary((msg) => o.onProgress?.(msg));
+  }
+
   o.onProgress?.('Transcribing...');
 
-  // Try whisper.cpp binary (installed via homebrew or bundled)
   const { execFile } = await import('child_process');
   const { promisify } = await import('util');
   const execFileAsync = promisify(execFile);
-
-  // Look for whisper binary in common locations
-  const binaryPaths = [
-    '/opt/homebrew/bin/whisper-cpp',
-    '/opt/homebrew/bin/whisper',
-    '/usr/local/bin/whisper-cpp',
-    '/usr/local/bin/whisper',
-    join(app.getPath('userData'), 'bin', 'whisper-cpp'),
-  ];
-
-  let whisperBin: string | null = null;
-  const { existsSync } = await import('fs');
-  for (const p of binaryPaths) {
-    if (existsSync(p)) {
-      whisperBin = p;
-      break;
-    }
-  }
-
-  if (!whisperBin) {
-    // Fallback: try to use the model with Transformers.js ONNX approach
-    unlinkSync(wavPath);
-    throw new Error(
-      'whisper-cpp binary not found. Install via: brew install whisper-cpp\n' +
-      'Or switch to the cloud engine in Voice settings.'
-    );
-  }
+  const whisperBin = getWhisperBinaryPath();
 
   try {
     const args = [
@@ -188,7 +169,7 @@ async function transcribeWhisperCpp(o: LocalTranscribeOptions): Promise<string> 
       '--no-timestamps',
       '-l', o.language || 'auto',
     ];
-    const { stdout } = await execFileAsync(whisperBin, args, { timeout: 60000 });
+    const { stdout } = await execFileAsync(whisperBin, args, { timeout: 120000 });
     return stdout.trim();
   } finally {
     try { unlinkSync(wavPath); } catch {}

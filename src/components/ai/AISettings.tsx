@@ -545,7 +545,7 @@ const VOICE_ENGINE_HINT: Record<VoiceEngine, string> = {
   cloud:
     'Best accuracy. OpenAI-compatible — works with OpenAI (gpt-4o-transcribe) or, by editing the base URL, Groq (whisper-large-v3-turbo) and others. Audio is sent to the endpoint.',
   local:
-    'Fully offline and private. Download a Whisper model below, then install whisper-cpp (brew install whisper-cpp). Audio never leaves your machine.',
+    'Fully offline and private. Pick a model below and it downloads everything automatically. Audio never leaves your machine.',
 };
 
 function VoiceSection({ onClose }: { onClose: () => void }) {

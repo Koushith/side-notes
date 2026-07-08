@@ -10,7 +10,7 @@ import pkg from 'electron-updater';
 import { simpleGit, type SimpleGit } from 'simple-git';
 import { generate as aiGenerate, listOllamaModels, type AIProvider } from './ai';
 import { transcribeCloud, transcribeLocal } from './voice';
-import { WHISPER_MODELS, isModelDownloaded, downloadModel, deleteModel, cancelDownload, listDownloadedModels, getModelsDir } from './whisperModels';
+import { WHISPER_MODELS, isModelDownloaded, downloadModel, deleteModel, cancelDownload, listDownloadedModels, getModelsDir, isWhisperBinaryInstalled } from './whisperModels';
 const { autoUpdater } = pkg;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
