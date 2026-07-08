@@ -3,8 +3,7 @@ import { Mic, Loader2, X } from 'lucide-react';
 import { useVoice, getVoiceHotkey } from '@/stores/voice';
 import { cn } from '@/lib/utils';
 
-// Number of bars in the live waveform.
-const BARS = 28;
+const BARS = 24;
 
 export function VoiceDictation() {
   const status = useVoice((s) => s.status);
@@ -23,8 +22,6 @@ export function VoiceDictation() {
     if (!loadSettings) load();
   }, [loadSettings, load]);
 
-  // Drive the waveform while recording by sampling the mic level each frame and
-  // scrolling the bar buffer left.
   useEffect(() => {
     if (status !== 'recording') {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -42,9 +39,6 @@ export function VoiceDictation() {
     };
   }, [status]);
 
-  // Hold-to-talk: hold the configured key to record, release to transcribe.
-  // Esc cancels. We ignore the hotkey while a text input/rebind field is focused
-  // so typing F-keys into settings doesn't trigger it.
   useEffect(() => {
     const isEditableTarget = (el: EventTarget | null) =>
       el instanceof HTMLElement &&
@@ -76,7 +70,6 @@ export function VoiceDictation() {
     };
   }, [start, stopAndTranscribe, cancel]);
 
-  // Auto-dismiss an error after a few seconds.
   useEffect(() => {
     if (!lastError) return;
     const t = window.setTimeout(() => useVoice.setState({ lastError: null }), 5000);
@@ -91,63 +84,78 @@ export function VoiceDictation() {
   };
 
   return (
-    <div className="fixed bottom-5 right-5 z-[150] flex flex-col items-end gap-2 select-none">
+    <>
+      {/* Error toast */}
       {lastError && (
-        <div className="max-w-[280px] rounded-lg border border-red-500/30 bg-bg-elevated px-3 py-2 text-[12px] text-red-400 shadow-lg animate-fade-in">
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[151] max-w-[320px] rounded-lg border border-red-500/30 bg-bg-elevated px-4 py-2.5 text-[12px] text-red-400 shadow-lg animate-fade-in">
           {lastError}
         </div>
       )}
 
-      {status === 'idle' ? (
-        // Resting state: a small mic button. Click or hold the hotkey to dictate.
+      {/* Idle: small floating mic button */}
+      {status === 'idle' && (
         <button
           onClick={onButtonClick}
           title={`Dictate — hold ${getVoiceHotkey()} or click`}
-          className="grid h-10 w-10 place-items-center rounded-full border border-border bg-bg-elevated text-text-muted shadow-lg transition-colors hover:text-text hover:bg-bg-hover"
+          className="fixed bottom-5 right-5 z-[150] grid h-9 w-9 place-items-center rounded-full border border-border/60 bg-bg-elevated/80 backdrop-blur-sm text-text-muted shadow-lg transition-all hover:scale-105 hover:text-text hover:border-accent/40 hover:shadow-accent/10"
         >
-          <Mic size={17} />
+          <Mic size={15} />
         </button>
-      ) : (
-        // Active pill: waveform while recording, spinner while transcribing.
-        <div className="flex items-center gap-3 rounded-full border border-border bg-bg-elevated py-2 pl-3 pr-2 shadow-2xl animate-fade-in">
-          {status === 'recording' ? (
-            <>
-              <span className="relative grid h-6 w-6 place-items-center">
-                <span className="absolute inset-0 rounded-full bg-red-500/20 animate-ping" />
-                <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
-              </span>
-              <div className="flex h-6 items-center gap-[2px]">
-                {levels.map((l, i) => (
-                  <span
-                    key={i}
-                    className="w-[2.5px] rounded-full bg-accent"
-                    style={{ height: `${Math.max(2, l * 24)}px`, opacity: 0.5 + l * 0.5 }}
-                  />
-                ))}
-              </div>
-              <button
-                onClick={onButtonClick}
-                title="Stop & insert"
-                className="grid h-7 w-7 place-items-center rounded-full bg-accent text-bg transition-colors hover:bg-accent-hover"
-              >
-                <Mic size={14} />
-              </button>
-            </>
-          ) : (
-            <>
-              <Loader2 size={16} className="animate-spin text-accent" />
-              <span className="text-[12.5px] text-text-muted">{progress || 'Transcribing…'}</span>
-              <button
-                onClick={cancel}
-                title="Cancel"
-                className="grid h-7 w-7 place-items-center rounded-full text-text-muted transition-colors hover:bg-bg-hover hover:text-text"
-              >
-                <X size={14} />
-              </button>
-            </>
-          )}
+      )}
+
+      {/* Recording: centered bottom pill with waveform */}
+      {status === 'recording' && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[150] flex items-center gap-3 rounded-full border border-border/40 bg-bg-elevated/90 backdrop-blur-xl py-2 pl-4 pr-3 shadow-2xl animate-fade-in">
+          {/* Pulsing red dot */}
+          <span className="relative flex h-2.5 w-2.5 shrink-0">
+            <span className="absolute inset-0 rounded-full bg-red-500/40 animate-ping" />
+            <span className="relative rounded-full h-2.5 w-2.5 bg-red-500" />
+          </span>
+
+          {/* Waveform */}
+          <div className="flex h-5 items-center gap-[1.5px]">
+            {levels.map((l, i) => {
+              const center = BARS / 2;
+              const dist = Math.abs(i - center) / center;
+              const emphasis = 1 - dist * 0.4;
+              return (
+                <span
+                  key={i}
+                  className="w-[2px] rounded-full bg-accent transition-[height] duration-75"
+                  style={{
+                    height: `${Math.max(2, l * 20 * emphasis)}px`,
+                    opacity: 0.4 + l * 0.6,
+                  }}
+                />
+              );
+            })}
+          </div>
+
+          {/* Stop button */}
+          <button
+            onClick={onButtonClick}
+            title="Stop & insert"
+            className="grid h-7 w-7 place-items-center rounded-full bg-accent/90 text-bg transition-all hover:bg-accent hover:scale-105"
+          >
+            <Mic size={12} />
+          </button>
         </div>
       )}
-    </div>
+
+      {/* Transcribing: centered bottom pill with spinner */}
+      {status === 'transcribing' && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[150] flex items-center gap-2.5 rounded-full border border-border/40 bg-bg-elevated/90 backdrop-blur-xl py-2 pl-4 pr-3 shadow-2xl animate-fade-in">
+          <Loader2 size={14} className="animate-spin text-accent" />
+          <span className="text-[12px] text-text-muted whitespace-nowrap">{progress || 'Transcribing...'}</span>
+          <button
+            onClick={cancel}
+            title="Cancel"
+            className="grid h-6 w-6 place-items-center rounded-full text-text-subtle transition-colors hover:bg-bg-hover hover:text-text"
+          >
+            <X size={12} />
+          </button>
+        </div>
+      )}
+    </>
   );
 }
