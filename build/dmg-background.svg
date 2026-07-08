@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="540" height="380" viewBox="0 0 540 380">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#1c1a17" />
+      <stop offset="100%" stop-color="#0a0908" />
+    </radialGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="540" height="380" fill="url(#bg)" />
+
+  <!-- Title -->
+  <text x="270" y="62" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif" font-size="22" font-weight="300" fill="#f0ece6" letter-spacing="-0.3">Install SideNotes</text>
+
+  <!-- Subtitle -->
+  <text x="270" y="84" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif" font-size="10.5" fill="#6a655e">Drag to Applications · or double-click to install</text>
+
+  <!-- Flowing S-curve arrow connecting the two icon positions -->
+  <path d="M 212 195 C 235 220, 255 225, 270 215 C 285 205, 305 210, 328 195"
+        fill="none" stroke="rgba(247,243,236,0.12)" stroke-width="1.5" stroke-linecap="round" />
+  <!-- Arrowhead -->
+  <path d="M 323 200 L 330 193 L 324 188" fill="none" stroke="rgba(247,243,236,0.12)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+
+  <!-- Labels (positioned under where Finder places icons) -->
+  <text x="170" y="258" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif" font-size="11" fill="#9a958e">SideNotes</text>
+  <text x="370" y="258" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif" font-size="11" fill="#9a958e">Applications</text>
+
+  <!-- Divider -->
+  <line x1="120" y1="310" x2="420" y2="310" stroke="rgba(247,243,236,0.06)" stroke-width="0.5" />
+
+  <!-- Footer -->
+  <text x="270" y="338" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif" font-size="9.5" fill="#4a4540">After installing, SideNotes will launch from Applications.</text>
+  <text x="270" y="354" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif" font-size="9.5" fill="#4a4540">You can then eject this disk.</text>
+</svg>

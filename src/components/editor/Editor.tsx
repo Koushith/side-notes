@@ -22,12 +22,15 @@ import { markdownToDoc } from '@/lib/markdownLoader';
 import { Wikilink, preprocessWikilinks } from '../extensions/Wikilink';
 import { Tag, preprocessTags } from '../extensions/Tag';
 import { SlashMenu, SlashMenuState, clearSlashRange } from '../extensions/SlashMenu';
+import { TrailingNode } from '../extensions/TrailingNode';
+import { ResetMarksOnEnter } from '../extensions/ResetMarksOnEnter';
 import { WikilinkSuggest, WikilinkSuggestState } from '../extensions/WikilinkSuggest';
 import { WikilinkAutocomplete } from './WikilinkAutocomplete';
 import { MentionSuggest, MentionSuggestState } from '../extensions/MentionSuggest';
 import { MentionAutocomplete } from './MentionAutocomplete';
 import { EditorBubbleMenu } from './EditorBubbleMenu';
 import { TableBubbleMenu } from './TableBubbleMenu';
+import { TableSizePicker } from './TableSizePicker';
 import { ViewModeTabs } from '../shared/ViewModeTabs';
 import { DailyNoteHeader, isDailyNote } from '../notes/DailyNoteHeader';
 import { TodoNoteHeader, isTodoNote } from '../notes/TodoNoteHeader';
@@ -76,6 +79,7 @@ export function Editor({ rel, vaultPath }: EditorProps) {
     rect: null,
   });
   const [inlineAIOpen, setInlineAIOpen] = useState(false);
+  const [tablePicker, setTablePicker] = useState<{ left: number; top: number } | null>(null);
   const editorRef = useRef<TiptapEditor | null>(null);
   const saveTimer = useRef<number | null>(null);
   const lastSavedRel = useRef<string>(rel);
@@ -149,6 +153,8 @@ export function Editor({ rel, vaultPath }: EditorProps) {
         MentionSuggest.configure({
           onStateChange: (s) => setMentionState(s),
         }),
+        TrailingNode,
+        ResetMarksOnEnter,
       ],
       content: '',
       editorProps: {
@@ -181,6 +187,26 @@ export function Editor({ rel, vaultPath }: EditorProps) {
           return false;
         },
         // Double-click an image to open it in the zoomable lightbox.
+        handleTextInput: (view, from, _to, text) => {
+          if (text !== ' ') return false;
+          const { state } = view;
+          const $from = state.doc.resolve(from);
+          if ($from.parent.type.name !== 'paragraph') return false;
+          const blockStart = $from.start();
+          const textBefore = state.doc.textBetween(blockStart, from, '\0', '\0');
+          if (/^\s*>$/.test(textBefore)) {
+            const blockquoteType = state.schema.nodes.blockquote;
+            if (!blockquoteType) return false;
+            let tr = state.tr.delete(blockStart, from);
+            const $pos = tr.doc.resolve(tr.mapping.map(from));
+            const range = $pos.blockRange();
+            if (!range) return false;
+            tr = tr.wrap(range, [{ type: blockquoteType }]);
+            view.dispatch(tr.scrollIntoView());
+            return true;
+          }
+          return false;
+        },
         handleDoubleClickOn: (_view, _pos, node) => {
           if (node.type.name === 'image' && node.attrs.src) {
             useLightbox.getState().open({ kind: 'image', src: node.attrs.src, title: node.attrs.alt ?? undefined });
@@ -197,10 +223,13 @@ export function Editor({ rel, vaultPath }: EditorProps) {
           const finalMd = isDailyNote(lastSavedRel.current)
             ? prependDailyTitle(dailyTitleRef.current, cleaned)
             : cleaned;
-          // No-op write guard: if the serialized markdown matches what we last loaded
-          // from / wrote to disk, skip the save. Avoids the stale-state-clobbers-external
-          // -change race when the watcher hasn't reloaded yet.
           if (finalMd === lastSavedRaw.current) return;
+          // Guard: never overwrite a file that had content with empty/near-empty output.
+          // This prevents bugs (doc corruption, serialization errors) from wiping notes.
+          if (finalMd.trim().length < 3 && lastSavedRaw.current.trim().length > 10) {
+            console.warn('Save blocked: refusing to overwrite non-empty file with empty content');
+            return;
+          }
           lastSavedRaw.current = finalMd;
           saveFile(lastSavedRel.current, finalMd).catch(console.error);
         }, 400);
@@ -389,6 +418,10 @@ export function Editor({ rel, vaultPath }: EditorProps) {
           ? prependDailyTitle(dailyTitleRef.current, cleaned)
           : cleaned;
         if (finalMd === lastSavedRaw.current) return;
+        if (finalMd.trim().length < 3 && lastSavedRaw.current.trim().length > 10) {
+          console.warn('Flush blocked: refusing to overwrite non-empty file with empty content');
+          return;
+        }
         lastSavedRaw.current = finalMd;
         saveFile(lastSavedRel.current, finalMd).catch(console.error);
       }
@@ -405,6 +438,10 @@ export function Editor({ rel, vaultPath }: EditorProps) {
       const cleaned = unrewriteImagePaths(md, lastSavedRel.current);
       const finalMd = prependDailyTitle(dailyTitleRef.current, cleaned);
       if (finalMd === lastSavedRaw.current) return;
+      if (finalMd.trim().length < 3 && lastSavedRaw.current.trim().length > 10) {
+        console.warn('Daily save blocked: refusing to overwrite non-empty file with empty content');
+        return;
+      }
       lastSavedRaw.current = finalMd;
       saveFile(lastSavedRel.current, finalMd).catch(console.error);
     }, 400);
@@ -438,7 +475,12 @@ export function Editor({ rel, vaultPath }: EditorProps) {
         const cmd = filteredSlash[selectedSlashIdx];
         if (cmd) {
           clearSlashRange(editor);
-          cmd.run(editor);
+          if (cmd.title === 'Table') {
+            const rect = slashState.rect;
+            if (rect) setTablePicker({ left: rect.left, top: rect.top });
+          } else {
+            cmd.run(editor);
+          }
         }
       } else if (e.key === 'Escape') {
         e.preventDefault();
@@ -589,7 +631,12 @@ export function Editor({ rel, vaultPath }: EditorProps) {
                 e.preventDefault();
                 if (!editor) return;
                 clearSlashRange(editor);
-                cmd.run(editor);
+                if (cmd.title === 'Table') {
+                  const rect = slashState.rect;
+                  if (rect) setTablePicker({ left: rect.left, top: rect.top });
+                } else {
+                  cmd.run(editor);
+                }
               }}
             >
               <span className="text-accent">{cmd.icon}</span>
@@ -600,6 +647,17 @@ export function Editor({ rel, vaultPath }: EditorProps) {
             </button>
           ))}
         </div>
+      )}
+
+      {tablePicker && editor && (
+        <TableSizePicker
+          rect={tablePicker}
+          onInsert={(rows, cols) => {
+            editor.chain().focus().insertTable({ rows, cols, withHeaderRow: true }).run();
+            setTablePicker(null);
+          }}
+          onClose={() => setTablePicker(null)}
+        />
       )}
     </div>
   );
@@ -640,7 +698,7 @@ function buildSlashCommands(insertImage: (file: File) => Promise<void>): SlashCm
           })
           .run(),
     },
-    { title: 'Table', hint: 'Add/remove rows & columns from the toolbar', keywords: ['table', 'grid'], icon: i(TableIcon), run: (e) => e.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
+    { title: 'Table', hint: 'Choose size, then add/remove from toolbar', keywords: ['table', 'grid'], icon: i(TableIcon), run: () => {} },
     { title: 'Image', hint: 'From your computer', keywords: ['image', 'picture', 'photo'], icon: i(ImageIcon), run: () => {
       const input = document.createElement('input');
       input.type = 'file';

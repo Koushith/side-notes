@@ -137,18 +137,20 @@
     "dmg": {
       "title": "SideNotes ${version} ${arch}",
       "icon": "build/icon.icns",
+      "background": "build/dmg-background.png",
       "window": {
         "width": 540,
         "height": 380
       },
+      "iconSize": 80,
       "contents": [
         {
-          "x": 140,
+          "x": 170,
           "y": 200,
           "type": "file"
         },
         {
-          "x": 400,
+          "x": 370,
           "y": 200,
           "type": "link",
           "path": "/Applications"

@@ -24,6 +24,13 @@ interface Props {
 export function EditorBubbleMenu({ editor }: Props) {
   const isActive = (name: string, attrs?: Record<string, unknown>) => editor.isActive(name, attrs);
 
+  const setHeading = (level: 1 | 2 | 3) => {
+    // Collapse selection to cursor position so heading only affects
+    // the single block where the cursor/anchor is, never adjacent blocks.
+    const { anchor } = editor.state.selection;
+    editor.chain().focus().setTextSelection(anchor).toggleHeading({ level }).run();
+  };
+
   return (
     <BubbleMenu
       editor={editor}
@@ -37,21 +44,21 @@ export function EditorBubbleMenu({ editor }: Props) {
     >
       <ToolButton
         active={isActive('heading', { level: 1 })}
-        onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+        onClick={() => setHeading(1)}
         title="Heading 1"
       >
         <Heading1 size={14} />
       </ToolButton>
       <ToolButton
         active={isActive('heading', { level: 2 })}
-        onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+        onClick={() => setHeading(2)}
         title="Heading 2"
       >
         <Heading2 size={14} />
       </ToolButton>
       <ToolButton
         active={isActive('heading', { level: 3 })}
-        onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+        onClick={() => setHeading(3)}
         title="Heading 3"
       >
         <Heading3 size={14} />
