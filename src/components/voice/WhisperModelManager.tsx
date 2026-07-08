@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
-import { Download, Trash2, Check, X, Loader2, HardDrive } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Download, Trash2, Check, X, Loader2, HardDrive, Mic, CircleStop } from 'lucide-react';
 import { api } from '@/lib/api';
+import { startRecording, decodeToPcm16k, type RecorderHandle } from '@/lib/recorder';
 import type { WhisperModelView, WhisperDownloadProgress } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -13,6 +14,9 @@ export function WhisperModelManager({ selectedModel, onSelect }: Props) {
   const [models, setModels] = useState<WhisperModelView[]>([]);
   const [downloading, setDownloading] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
+  const [testing, setTesting] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<{ modelId: string; text: string; ok: boolean } | null>(null);
+  const recorderRef = useRef<RecorderHandle | null>(null);
 
   const loadModels = async () => {
     const m = await api.whisper.getModels();
@@ -71,6 +75,43 @@ export function WhisperModelManager({ selectedModel, onSelect }: Props) {
     });
   };
 
+  const handleTest = async (modelId: string) => {
+    setTesting(modelId);
+    setTestResult(null);
+    try {
+      await api.voice.requestMic();
+      const recorder = await startRecording();
+      recorderRef.current = recorder;
+      // Record for 3 seconds then transcribe
+      await new Promise((r) => setTimeout(r, 3000));
+      if (!recorderRef.current) return;
+      const rec = await recorderRef.current.stop();
+      recorderRef.current = null;
+      const pcm = await decodeToPcm16k(rec.blob);
+      // Temporarily save the model selection so transcription uses it
+      await api.voice.setSettings({ engine: 'local', local: { model: modelId } });
+      const id = `test-${Date.now()}`;
+      const res = await api.voice.transcribe(id, { kind: 'local', pcm });
+      if (res.ok) {
+        setTestResult({ modelId, text: res.text || '(no speech detected)', ok: true });
+      } else {
+        setTestResult({ modelId, text: res.error, ok: false });
+      }
+    } catch (err) {
+      setTestResult({ modelId, text: err instanceof Error ? err.message : 'Test failed', ok: false });
+    } finally {
+      setTesting(null);
+    }
+  };
+
+  const handleStopTest = () => {
+    if (recorderRef.current) {
+      recorderRef.current.cancel();
+      recorderRef.current = null;
+    }
+    setTesting(null);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center gap-2 text-xs text-text-muted py-4">
@@ -85,10 +126,12 @@ export function WhisperModelManager({ selectedModel, onSelect }: Props) {
         <HardDrive size={14} className="text-text-muted" />
         <span className="text-xs font-medium text-text-muted uppercase tracking-wide">Local Models</span>
       </div>
+      <div className="max-h-[280px] overflow-y-auto space-y-1.5 pr-1">
       {models.map((model) => {
         const isDownloading = model.id in downloading;
         const isSelected = selectedModel === model.id;
-        const canSelect = model.downloaded && !isDownloading;
+        const isTesting = testing === model.id;
+        const hasTestResult = testResult?.modelId === model.id;
 
         return (
           <div
@@ -96,9 +139,7 @@ export function WhisperModelManager({ selectedModel, onSelect }: Props) {
             className={cn(
               'rounded-lg border p-3 transition-colors',
               isSelected ? 'border-accent/50 bg-accent/5' : 'border-border bg-bg-elevated',
-              canSelect && !isSelected && 'cursor-pointer hover:border-text-subtle'
             )}
-            onClick={() => canSelect && onSelect(model.id)}
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -108,9 +149,44 @@ export function WhisperModelManager({ selectedModel, onSelect }: Props) {
                     Recommended
                   </span>
                 )}
+                {isSelected && (
+                  <span className="text-[10px] font-medium text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                    Active
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-1.5">
-                {isSelected && <Check size={14} className="text-accent" />}
+                {/* Downloaded: show Select + Test + Delete */}
+                {model.downloaded && !isDownloading && !isSelected && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelect(model.id);
+                    }}
+                    className="px-2 py-1 rounded text-xs font-medium text-text bg-bg-hover hover:bg-accent/20 hover:text-accent transition-colors"
+                  >
+                    Select
+                  </button>
+                )}
+                {model.downloaded && !isDownloading && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (isTesting) handleStopTest();
+                      else handleTest(model.id);
+                    }}
+                    disabled={testing !== null && !isTesting}
+                    title={isTesting ? 'Stop test' : 'Test: records 3s and transcribes'}
+                    className={cn(
+                      'p-1.5 rounded transition-colors',
+                      isTesting
+                        ? 'text-red-400 bg-red-500/10 hover:bg-red-500/20'
+                        : 'text-text-subtle hover:text-accent hover:bg-accent/10'
+                    )}
+                  >
+                    {isTesting ? <CircleStop size={13} /> : <Mic size={13} />}
+                  </button>
+                )}
                 {model.downloaded && !isDownloading && (
                   <button
                     onClick={(e) => {
@@ -118,11 +194,12 @@ export function WhisperModelManager({ selectedModel, onSelect }: Props) {
                       handleDelete(model.id);
                     }}
                     title="Delete model"
-                    className="p-1 rounded text-text-subtle hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                    className="p-1.5 rounded text-text-subtle hover:text-red-400 hover:bg-red-500/10 transition-colors"
                   >
                     <Trash2 size={12} />
                   </button>
                 )}
+                {/* Not downloaded: show Download */}
                 {!model.downloaded && !isDownloading && (
                   <button
                     onClick={(e) => {
@@ -136,6 +213,7 @@ export function WhisperModelManager({ selectedModel, onSelect }: Props) {
                     Download
                   </button>
                 )}
+                {/* Downloading: show progress + cancel */}
                 {isDownloading && (
                   <button
                     onClick={(e) => {
@@ -143,7 +221,7 @@ export function WhisperModelManager({ selectedModel, onSelect }: Props) {
                       handleCancel(model.id);
                     }}
                     title="Cancel download"
-                    className="p-1 rounded text-text-subtle hover:text-text hover:bg-bg-hover transition-colors"
+                    className="p-1.5 rounded text-text-subtle hover:text-text hover:bg-bg-hover transition-colors"
                   >
                     <X size={12} />
                   </button>
@@ -155,6 +233,7 @@ export function WhisperModelManager({ selectedModel, onSelect }: Props) {
               <span>{model.languages}</span>
               <span>{model.speed}</span>
             </div>
+            {/* Download progress */}
             {isDownloading && (
               <div className="mt-2">
                 <div className="h-1.5 rounded-full bg-border overflow-hidden">
@@ -168,9 +247,31 @@ export function WhisperModelManager({ selectedModel, onSelect }: Props) {
                 </span>
               </div>
             )}
+            {/* Test recording indicator */}
+            {isTesting && (
+              <div className="mt-2 flex items-center gap-2 text-[11px] text-accent">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inset-0 rounded-full bg-red-500 animate-ping opacity-75" />
+                  <span className="relative rounded-full h-2 w-2 bg-red-500" />
+                </span>
+                Listening (3s)...
+              </div>
+            )}
+            {/* Test result */}
+            {hasTestResult && !isTesting && (
+              <div className={cn(
+                'mt-2 px-2 py-1.5 rounded text-[11px] border',
+                testResult.ok
+                  ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-400'
+                  : 'bg-red-500/5 border-red-500/20 text-red-400'
+              )}>
+                {testResult.ok ? '✓ ' : '✕ '}{testResult.text}
+              </div>
+            )}
           </div>
         );
       })}
+      </div>
     </div>
   );
 }

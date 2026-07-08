@@ -8,6 +8,7 @@ import { silentWav } from '@/lib/recorder';
 import { cn } from '@/lib/utils';
 import type { AIProvider, VoiceEngine } from '@/types';
 import { WhisperModelManager } from '@/components/voice/WhisperModelManager';
+import { toast } from '../shared/Toast';
 
 interface Props {
   open: boolean;
@@ -566,7 +567,6 @@ function VoiceSection({ onClose }: { onClose: () => void }) {
   const [capturing, setCapturing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
   useEffect(() => {
     if (!settings) loadSettings();
@@ -609,16 +609,10 @@ function VoiceSection({ onClose }: { onClose: () => void }) {
   // confirms it'll download the model on first real use.
   const onTest = async () => {
     setTesting(true);
-    setTestResult(null);
     const saved = await persist();
     if (!saved) {
       setTesting(false);
-      setTestResult({ ok: false, msg: 'Could not save settings before testing.' });
-      return;
-    }
-    if (engine === 'local') {
-      setTesting(false);
-      setTestResult({ ok: true, msg: 'Local engine downloads the model on first dictation.' });
+      toast('Could not save settings before testing.', 'error');
       return;
     }
     const res = await api.voice.transcribe(`vtest-${Date.now()}`, {
@@ -627,7 +621,11 @@ function VoiceSection({ onClose }: { onClose: () => void }) {
       mimeType: 'audio/wav',
     });
     setTesting(false);
-    setTestResult(res.ok ? { ok: true, msg: 'Connected — endpoint accepted the request.' } : { ok: false, msg: res.error });
+    if (res.ok) {
+      toast('Connected. Endpoint accepted the request.', 'success');
+    } else {
+      toast(res.error, 'error');
+    }
   };
 
   return (
@@ -747,18 +745,14 @@ function VoiceSection({ onClose }: { onClose: () => void }) {
       </div>
 
       <div className="flex items-center gap-2 px-5 py-3 border-t border-border-subtle">
-        <button
-          onClick={onTest}
-          disabled={testing || saving}
-          className="px-3 py-1.5 text-[12.5px] rounded-md border border-border text-text-muted hover:text-text hover:bg-bg-hover transition-colors disabled:opacity-50"
-        >
-          {testing ? 'Testing…' : 'Test connection'}
-        </button>
-        {testResult && (
-          <span className={cn('text-[11.5px] truncate', testResult.ok ? 'text-emerald-500' : 'text-red-500')}>
-            {testResult.ok ? '✓ ' : '✕ '}
-            {testResult.msg}
-          </span>
+        {engine === 'cloud' && (
+          <button
+            onClick={onTest}
+            disabled={testing || saving}
+            className="px-3 py-1.5 text-[12.5px] rounded-md border border-border text-text-muted hover:text-text hover:bg-bg-hover transition-colors disabled:opacity-50"
+          >
+            {testing ? 'Testing…' : 'Test connection'}
+          </button>
         )}
         <div className="flex-1" />
         <button

@@ -146,14 +146,14 @@
   .ProseMirror li > p { margin: 0; }
   .ProseMirror li > ul, .ProseMirror li > ol { margin: 0.15em 0; }
   .ProseMirror a[href] {
-    color: rgb(var(--c-link));
+    color: rgb(var(--c-accent));
     text-decoration: underline;
-    text-decoration-color: rgb(var(--c-link) / 0.35);
+    text-decoration-color: rgb(var(--c-accent) / 0.35);
     text-underline-offset: 2px;
     transition: text-decoration-color 120ms ease;
   }
   .ProseMirror a[href]:hover {
-    text-decoration-color: rgb(var(--c-link));
+    text-decoration-color: rgb(var(--c-accent));
   }
   .ProseMirror blockquote {
     border-left: 3px solid rgb(var(--c-quote-border));
@@ -195,18 +195,18 @@
     margin: 1.8em 0;
   }
   .ProseMirror a.wikilink {
-    color: rgb(var(--c-accent-ink));
+    color: rgb(var(--c-accent));
     background: rgb(var(--c-accent-subtle));
     padding: 0 4px;
     border-radius: 3px;
-    border-bottom: 1px solid rgb(var(--c-accent));
+    border-bottom: 1px solid rgb(var(--c-accent) / 0.4);
     text-decoration: none;
     cursor: pointer;
     font-style: normal;
   }
   .ProseMirror a.wikilink:hover {
     background: rgb(var(--c-accent-subtle));
-    filter: brightness(0.96);
+    filter: brightness(1.1);
   }
   .ProseMirror a.wikilink.is-broken {
     color: rgb(var(--c-text-muted));
