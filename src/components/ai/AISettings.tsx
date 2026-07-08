@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { silentWav } from '@/lib/recorder';
 import { cn } from '@/lib/utils';
 import type { AIProvider, VoiceEngine } from '@/types';
+import { WhisperModelManager } from '@/components/voice/WhisperModelManager';
 
 interface Props {
   open: boolean;
@@ -544,7 +545,7 @@ const VOICE_ENGINE_HINT: Record<VoiceEngine, string> = {
   cloud:
     'Best accuracy. OpenAI-compatible — works with OpenAI (gpt-4o-transcribe) or, by editing the base URL, Groq (whisper-large-v3-turbo) and others. Audio is sent to the endpoint.',
   local:
-    'Runs Whisper on your machine via Transformers.js — fully offline and private. First use downloads the model. Slower, and requires `npm install @huggingface/transformers`.',
+    'Fully offline and private. Download a Whisper model below, then install whisper-cpp (brew install whisper-cpp). Audio never leaves your machine.',
 };
 
 function VoiceSection({ onClose }: { onClose: () => void }) {
@@ -688,19 +689,10 @@ function VoiceSection({ onClose }: { onClose: () => void }) {
             </Field>
           </>
         ) : (
-          <Field label="Model">
-            <input
-              value={localModel}
-              onChange={(e) => setLocalModel(e.target.value)}
-              className={cn(inputClass, 'font-mono text-[11.5px]')}
-              placeholder="Xenova/whisper-base.en"
-            />
-            <p className="mt-1.5 text-[11px] text-text-subtle leading-snug">
-              Try <code>Xenova/whisper-tiny.en</code> (fastest) up to{' '}
-              <code>Xenova/whisper-small.en</code> (more accurate). Drop the <code>.en</code> for
-              multilingual. Requires <code>npm install @huggingface/transformers</code>.
-            </p>
-          </Field>
+          <WhisperModelManager
+            selectedModel={localModel}
+            onSelect={(id) => setLocalModel(id)}
+          />
         )}
 
         <div className="grid grid-cols-2 gap-3">

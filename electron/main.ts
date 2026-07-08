@@ -10,6 +10,7 @@ import pkg from 'electron-updater';
 import { simpleGit, type SimpleGit } from 'simple-git';
 import { generate as aiGenerate, listOllamaModels, type AIProvider } from './ai';
 import { transcribeCloud, transcribeLocal } from './voice';
+import { WHISPER_MODELS, isModelDownloaded, downloadModel, deleteModel, cancelDownload, listDownloadedModels, getModelsDir } from './whisperModels';
 const { autoUpdater } = pkg;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -1165,6 +1166,41 @@ ipcMain.handle('voice:cancel', async (_e, id: string): Promise<boolean> => {
     return true;
   }
   return false;
+});
+
+// ---- IPC: Whisper Models ----
+ipcMain.handle('whisper:models', async () => {
+  const downloaded = listDownloadedModels();
+  return WHISPER_MODELS.map((m) => ({
+    ...m,
+    downloaded: downloaded.includes(m.id),
+  }));
+});
+
+ipcMain.handle('whisper:download', async (e, modelId: string) => {
+  const sender = e.sender;
+  try {
+    await downloadModel(modelId, (p) => {
+      if (!sender.isDestroyed()) {
+        sender.send('whisper:download:progress', p);
+      }
+    });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+});
+
+ipcMain.handle('whisper:download:cancel', async (_e, modelId: string) => {
+  return cancelDownload(modelId);
+});
+
+ipcMain.handle('whisper:delete', async (_e, modelId: string) => {
+  return deleteModel(modelId);
+});
+
+ipcMain.handle('whisper:modelsDir', async () => {
+  return getModelsDir();
 });
 
 // ---- IPC: Export ----

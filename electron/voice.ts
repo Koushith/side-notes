@@ -59,7 +59,6 @@ export async function transcribeCloud(o: CloudTranscribeOptions): Promise<string
 }
 
 export interface LocalTranscribeOptions {
-  /** A Transformers.js ASR model id, e.g. "Xenova/whisper-base.en". */
   model: string;
   language?: string;
   /** Mono 16 kHz PCM samples in [-1, 1], decoded in the renderer. */
@@ -67,26 +66,28 @@ export interface LocalTranscribeOptions {
   onProgress?: (msg: string) => void;
 }
 
-// Cache the loaded pipeline per model — first call downloads the weights (cached
-// to disk by Transformers.js), later calls are instant.
+// Cache the loaded pipeline per model (Transformers.js path).
 let localPipe: { model: string; run: (audio: Float32Array, opts: Record<string, unknown>) => Promise<{ text: string }> } | null = null;
 
 export async function transcribeLocal(o: LocalTranscribeOptions): Promise<string> {
-  // Lazy + optional. The package is an optional peer dep: a variable specifier
-  // keeps both TypeScript and the bundler from trying to resolve it at build
-  // time, so the app still builds/runs without it installed.
+  // If the model is a ggml model ID (from our catalog), use whisper.cpp subprocess
+  if (o.model.startsWith('ggml-')) {
+    return transcribeWhisperCpp(o);
+  }
+
+  // Fallback: Transformers.js (optional peer dep)
   const pkg = '@huggingface/transformers';
   let transformers: { pipeline: (...args: unknown[]) => Promise<unknown> };
   try {
     transformers = (await import(/* @vite-ignore */ pkg)) as never;
   } catch {
     throw new Error(
-      'Local engine not installed. Run `npm install @huggingface/transformers` and restart, or switch to the cloud engine in Voice settings.'
+      'Local engine not installed. Download a model in Voice settings, or switch to the cloud engine.'
     );
   }
 
   if (!localPipe || localPipe.model !== o.model) {
-    o.onProgress?.('Loading model…');
+    o.onProgress?.('Loading model...');
     const pipe = await transformers.pipeline('automatic-speech-recognition', o.model, {
       progress_callback: (p: { status?: string; progress?: number }) => {
         if (p?.status === 'progress' && typeof p.progress === 'number') {
@@ -97,15 +98,101 @@ export async function transcribeLocal(o: LocalTranscribeOptions): Promise<string
     localPipe = { model: o.model, run: pipe as never };
   }
 
-  o.onProgress?.('Transcribing…');
+  o.onProgress?.('Transcribing...');
   const out = await localPipe.run(o.pcm, {
-    // chunked decoding lets it handle clips longer than 30s
     chunk_length_s: 30,
     stride_length_s: 5,
     language: o.language || undefined,
     task: 'transcribe',
   });
   return (out.text ?? '').trim();
+}
+
+async function transcribeWhisperCpp(o: LocalTranscribeOptions): Promise<string> {
+  const { getModelPath } = await import('./whisperModels');
+  const modelPath = getModelPath(o.model);
+  if (!modelPath) {
+    throw new Error(`Model "${o.model}" not downloaded. Open Voice settings to download it.`);
+  }
+
+  o.onProgress?.('Preparing audio...');
+
+  // Write PCM to a temp WAV file (whisper.cpp expects 16kHz mono WAV)
+  const { app } = await import('electron');
+  const { join } = await import('path');
+  const { writeFileSync, unlinkSync } = await import('fs');
+  const tmpDir = app.getPath('temp');
+  const wavPath = join(tmpDir, `sn-voice-${Date.now()}.wav`);
+
+  // Create WAV header + PCM16 data
+  const samples = o.pcm;
+  const numSamples = samples.length;
+  const buffer = Buffer.alloc(44 + numSamples * 2);
+  buffer.write('RIFF', 0);
+  buffer.writeUInt32LE(36 + numSamples * 2, 4);
+  buffer.write('WAVE', 8);
+  buffer.write('fmt ', 12);
+  buffer.writeUInt32LE(16, 16);
+  buffer.writeUInt16LE(1, 20); // PCM
+  buffer.writeUInt16LE(1, 22); // mono
+  buffer.writeUInt32LE(16000, 24); // sample rate
+  buffer.writeUInt32LE(32000, 28); // byte rate
+  buffer.writeUInt16LE(2, 32); // block align
+  buffer.writeUInt16LE(16, 34); // bits per sample
+  buffer.write('data', 36);
+  buffer.writeUInt32LE(numSamples * 2, 40);
+  for (let i = 0; i < numSamples; i++) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    buffer.writeInt16LE(Math.round(s * 32767), 44 + i * 2);
+  }
+  writeFileSync(wavPath, buffer);
+
+  o.onProgress?.('Transcribing...');
+
+  // Try whisper.cpp binary (installed via homebrew or bundled)
+  const { execFile } = await import('child_process');
+  const { promisify } = await import('util');
+  const execFileAsync = promisify(execFile);
+
+  // Look for whisper binary in common locations
+  const binaryPaths = [
+    '/opt/homebrew/bin/whisper-cpp',
+    '/opt/homebrew/bin/whisper',
+    '/usr/local/bin/whisper-cpp',
+    '/usr/local/bin/whisper',
+    join(app.getPath('userData'), 'bin', 'whisper-cpp'),
+  ];
+
+  let whisperBin: string | null = null;
+  const { existsSync } = await import('fs');
+  for (const p of binaryPaths) {
+    if (existsSync(p)) {
+      whisperBin = p;
+      break;
+    }
+  }
+
+  if (!whisperBin) {
+    // Fallback: try to use the model with Transformers.js ONNX approach
+    unlinkSync(wavPath);
+    throw new Error(
+      'whisper-cpp binary not found. Install via: brew install whisper-cpp\n' +
+      'Or switch to the cloud engine in Voice settings.'
+    );
+  }
+
+  try {
+    const args = [
+      '-m', modelPath,
+      '-f', wavPath,
+      '--no-timestamps',
+      '-l', o.language || 'auto',
+    ];
+    const { stdout } = await execFileAsync(whisperBin, args, { timeout: 60000 });
+    return stdout.trim();
+  } finally {
+    try { unlinkSync(wavPath); } catch {}
+  }
 }
 
 function stripTrailingSlash(s: string): string {

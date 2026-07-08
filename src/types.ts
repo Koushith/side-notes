@@ -160,6 +160,34 @@ export interface ApiBridge {
     cancel: (id: string) => Promise<boolean>;
     onProgress: (id: string, handler: (msg: string) => void) => () => void;
   };
+  whisper: {
+    getModels: () => Promise<WhisperModelView[]>;
+    download: (modelId: string) => Promise<{ ok: boolean; error?: string }>;
+    cancelDownload: (modelId: string) => Promise<boolean>;
+    deleteModel: (modelId: string) => Promise<boolean>;
+    getModelsDir: () => Promise<string>;
+    onDownloadProgress: (handler: (p: WhisperDownloadProgress) => void) => () => void;
+  };
+}
+
+export interface WhisperModelView {
+  id: string;
+  name: string;
+  size: string;
+  sizeBytes: number;
+  languages: string;
+  speed: string;
+  recommended?: boolean;
+  downloaded: boolean;
+}
+
+export interface WhisperDownloadProgress {
+  modelId: string;
+  percent: number;
+  downloadedBytes: number;
+  totalBytes: number;
+  status: 'downloading' | 'done' | 'error';
+  error?: string;
 }
 
 declare global {

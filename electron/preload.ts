@@ -182,6 +182,18 @@ const api = {
       return () => ipcRenderer.removeListener(channel, listener);
     },
   },
+  whisper: {
+    getModels: () => ipcRenderer.invoke('whisper:models'),
+    download: (modelId: string) => ipcRenderer.invoke('whisper:download', modelId),
+    cancelDownload: (modelId: string) => ipcRenderer.invoke('whisper:download:cancel', modelId),
+    deleteModel: (modelId: string) => ipcRenderer.invoke('whisper:delete', modelId),
+    getModelsDir: () => ipcRenderer.invoke('whisper:modelsDir') as Promise<string>,
+    onDownloadProgress: (handler: (p: unknown) => void) => {
+      const listener = (_: unknown, p: unknown) => handler(p);
+      ipcRenderer.on('whisper:download:progress', listener);
+      return () => ipcRenderer.removeListener('whisper:download:progress', listener);
+    },
+  },
 };
 
 contextBridge.exposeInMainWorld('api', api);
