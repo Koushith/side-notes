@@ -21,17 +21,19 @@ export interface LocalModel {
 
 export const LOCAL_MODELS: LocalModel[] = [
   {
-    id: 'whisper-tiny.en',
-    name: 'Whisper Tiny (English)',
-    size: '75 MB',
-    sizeBytes: 75_000_000,
-    languages: 'English only',
-    speed: 'Fastest',
-    engine: 'sherpa-whisper',
+    id: 'nemo-parakeet',
+    name: 'Parakeet TDT 0.6B (NVIDIA)',
+    size: '680 MB',
+    sizeBytes: 680_000_000,
+    languages: '25 languages',
+    speed: 'Fast, best accuracy',
+    recommended: true,
+    engine: 'sherpa-nemo',
     files: [
-      { name: 'tiny.en-encoder.onnx', url: 'https://huggingface.co/csukuangfj/sherpa-onnx-whisper-tiny.en/resolve/main/tiny.en-encoder.onnx' },
-      { name: 'tiny.en-decoder.onnx', url: 'https://huggingface.co/csukuangfj/sherpa-onnx-whisper-tiny.en/resolve/main/tiny.en-decoder.onnx' },
-      { name: 'tiny.en-tokens.txt', url: 'https://huggingface.co/csukuangfj/sherpa-onnx-whisper-tiny.en/resolve/main/tiny.en-tokens.txt' },
+      { name: 'encoder.onnx', url: 'https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3/resolve/main/encoder.int8.onnx' },
+      { name: 'decoder.onnx', url: 'https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3/resolve/main/decoder.int8.onnx' },
+      { name: 'joiner.onnx', url: 'https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3/resolve/main/joiner.int8.onnx' },
+      { name: 'tokens.txt', url: 'https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3/resolve/main/tokens.txt' },
     ],
   },
   {
@@ -49,20 +51,6 @@ export const LOCAL_MODELS: LocalModel[] = [
     ],
   },
   {
-    id: 'whisper-small.en',
-    name: 'Whisper Small (English)',
-    size: '466 MB',
-    sizeBytes: 466_000_000,
-    languages: 'English only',
-    speed: 'Moderate',
-    engine: 'sherpa-whisper',
-    files: [
-      { name: 'small.en-encoder.onnx', url: 'https://huggingface.co/csukuangfj/sherpa-onnx-whisper-small.en/resolve/main/small.en-encoder.onnx' },
-      { name: 'small.en-decoder.onnx', url: 'https://huggingface.co/csukuangfj/sherpa-onnx-whisper-small.en/resolve/main/small.en-decoder.onnx' },
-      { name: 'small.en-tokens.txt', url: 'https://huggingface.co/csukuangfj/sherpa-onnx-whisper-small.en/resolve/main/small.en-tokens.txt' },
-    ],
-  },
-  {
     id: 'whisper-base',
     name: 'Whisper Base (Multilingual)',
     size: '142 MB',
@@ -77,6 +65,34 @@ export const LOCAL_MODELS: LocalModel[] = [
     ],
   },
   {
+    id: 'whisper-small.en',
+    name: 'Whisper Small (English)',
+    size: '466 MB',
+    sizeBytes: 466_000_000,
+    languages: 'English only',
+    speed: 'Moderate, more accurate',
+    engine: 'sherpa-whisper',
+    files: [
+      { name: 'small.en-encoder.onnx', url: 'https://huggingface.co/csukuangfj/sherpa-onnx-whisper-small.en/resolve/main/small.en-encoder.onnx' },
+      { name: 'small.en-decoder.onnx', url: 'https://huggingface.co/csukuangfj/sherpa-onnx-whisper-small.en/resolve/main/small.en-decoder.onnx' },
+      { name: 'small.en-tokens.txt', url: 'https://huggingface.co/csukuangfj/sherpa-onnx-whisper-small.en/resolve/main/small.en-tokens.txt' },
+    ],
+  },
+  {
+    id: 'whisper-tiny.en',
+    name: 'Whisper Tiny (English)',
+    size: '75 MB',
+    sizeBytes: 75_000_000,
+    languages: 'English only',
+    speed: 'Fastest, lower accuracy',
+    engine: 'sherpa-whisper',
+    files: [
+      { name: 'tiny.en-encoder.onnx', url: 'https://huggingface.co/csukuangfj/sherpa-onnx-whisper-tiny.en/resolve/main/tiny.en-encoder.onnx' },
+      { name: 'tiny.en-decoder.onnx', url: 'https://huggingface.co/csukuangfj/sherpa-onnx-whisper-tiny.en/resolve/main/tiny.en-decoder.onnx' },
+      { name: 'tiny.en-tokens.txt', url: 'https://huggingface.co/csukuangfj/sherpa-onnx-whisper-tiny.en/resolve/main/tiny.en-tokens.txt' },
+    ],
+  },
+  {
     id: 'paraformer-zh-en',
     name: 'Paraformer (Chinese + English)',
     size: '232 MB',
@@ -87,22 +103,6 @@ export const LOCAL_MODELS: LocalModel[] = [
     files: [
       { name: 'model.onnx', url: 'https://huggingface.co/csukuangfj/sherpa-onnx-paraformer-zh-2023-09-14/resolve/main/model.int8.onnx' },
       { name: 'tokens.txt', url: 'https://huggingface.co/csukuangfj/sherpa-onnx-paraformer-zh-2023-09-14/resolve/main/tokens.txt' },
-    ],
-  },
-  {
-    id: 'nemo-parakeet',
-    name: 'Parakeet TDT 0.6B',
-    size: '680 MB',
-    sizeBytes: 680_000_000,
-    languages: '25 languages',
-    speed: 'Fast, best accuracy',
-    recommended: true,
-    engine: 'sherpa-nemo',
-    files: [
-      { name: 'encoder.onnx', url: 'https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3/resolve/main/encoder.int8.onnx' },
-      { name: 'decoder.onnx', url: 'https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3/resolve/main/decoder.int8.onnx' },
-      { name: 'joiner.onnx', url: 'https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3/resolve/main/joiner.int8.onnx' },
-      { name: 'tokens.txt', url: 'https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3/resolve/main/tokens.txt' },
     ],
   },
 ];
