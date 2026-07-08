@@ -10,7 +10,7 @@ import pkg from 'electron-updater';
 import { simpleGit, type SimpleGit } from 'simple-git';
 import { generate as aiGenerate, listOllamaModels, type AIProvider } from './ai';
 import { transcribeCloud, transcribeLocal } from './voice';
-import { WHISPER_MODELS, isModelDownloaded, downloadModel, deleteModel, cancelDownload, listDownloadedModels, getModelsDir, isWhisperBinaryInstalled } from './whisperModels';
+import { LOCAL_MODELS, isModelDownloaded, downloadModel, deleteModel, cancelDownload, listDownloadedModels, getModelsDir } from './localModels';
 const { autoUpdater } = pkg;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -1171,8 +1171,14 @@ ipcMain.handle('voice:cancel', async (_e, id: string): Promise<boolean> => {
 // ---- IPC: Whisper Models ----
 ipcMain.handle('whisper:models', async () => {
   const downloaded = listDownloadedModels();
-  return WHISPER_MODELS.map((m) => ({
-    ...m,
+  return LOCAL_MODELS.map((m) => ({
+    id: m.id,
+    name: m.name,
+    size: m.size,
+    sizeBytes: m.sizeBytes,
+    languages: m.languages,
+    speed: m.speed,
+    recommended: m.recommended,
     downloaded: downloaded.includes(m.id),
   }));
 });
@@ -1204,7 +1210,8 @@ ipcMain.handle('whisper:modelsDir', async () => {
 });
 
 ipcMain.handle('whisper:status', async () => {
-  return { binaryInstalled: isWhisperBinaryInstalled() };
+  // sherpa-onnx-node is always available (npm dep), no external binary needed
+  return { binaryInstalled: true };
 });
 
 // ---- IPC: Export ----

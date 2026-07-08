@@ -66,114 +66,80 @@ export interface LocalTranscribeOptions {
   onProgress?: (msg: string) => void;
 }
 
-// Cache the loaded pipeline per model (Transformers.js path).
-let localPipe: { model: string; run: (audio: Float32Array, opts: Record<string, unknown>) => Promise<{ text: string }> } | null = null;
+let cachedRecognizer: { modelId: string; recognizer: unknown } | null = null;
 
 export async function transcribeLocal(o: LocalTranscribeOptions): Promise<string> {
-  // If the model is a ggml model ID (from our catalog), use whisper.cpp subprocess
-  if (o.model.startsWith('ggml-')) {
-    return transcribeWhisperCpp(o);
-  }
+  const { getModelFiles, LOCAL_MODELS } = await import('./localModels');
+  const modelDef = LOCAL_MODELS.find((m) => m.id === o.model);
+  if (!modelDef) throw new Error(`Unknown model: ${o.model}`);
 
-  // Fallback: Transformers.js (optional peer dep)
-  const pkg = '@huggingface/transformers';
-  let transformers: { pipeline: (...args: unknown[]) => Promise<unknown> };
-  try {
-    transformers = (await import(/* @vite-ignore */ pkg)) as never;
-  } catch {
-    throw new Error(
-      'Local engine not installed. Download a model in Voice settings, or switch to the cloud engine.'
-    );
-  }
+  const files = getModelFiles(o.model);
+  if (!files) throw new Error(`Model "${modelDef.name}" not downloaded. Open Voice settings to download it.`);
 
-  if (!localPipe || localPipe.model !== o.model) {
-    o.onProgress?.('Loading model...');
-    const pipe = await transformers.pipeline('automatic-speech-recognition', o.model, {
-      progress_callback: (p: { status?: string; progress?: number }) => {
-        if (p?.status === 'progress' && typeof p.progress === 'number') {
-          o.onProgress?.(`Downloading model ${Math.round(p.progress)}%`);
-        }
-      },
-    });
-    localPipe = { model: o.model, run: pipe as never };
-  }
+  o.onProgress?.('Loading model...');
 
-  o.onProgress?.('Transcribing...');
-  const out = await localPipe.run(o.pcm, {
-    chunk_length_s: 30,
-    stride_length_s: 5,
-    language: o.language || undefined,
-    task: 'transcribe',
-  });
-  return (out.text ?? '').trim();
-}
+  const sherpa = await import('sherpa-onnx-node') as any;
 
-async function transcribeWhisperCpp(o: LocalTranscribeOptions): Promise<string> {
-  const { getModelPath } = await import('./whisperModels');
-  const modelPath = getModelPath(o.model);
-  if (!modelPath) {
-    throw new Error(`Model "${o.model}" not downloaded. Open Voice settings to download it.`);
-  }
+  if (!cachedRecognizer || cachedRecognizer.modelId !== o.model) {
+    let config: any;
 
-  o.onProgress?.('Preparing audio...');
+    if (modelDef.engine === 'sherpa-whisper') {
+      const encoder = Object.entries(files).find(([k]) => k.includes('encoder'))?.[1];
+      const decoder = Object.entries(files).find(([k]) => k.includes('decoder'))?.[1];
+      const tokens = Object.entries(files).find(([k]) => k.includes('tokens'))?.[1];
+      config = {
+        featConfig: { sampleRate: 16000, featureDim: 80 },
+        modelConfig: {
+          whisper: { encoder, decoder },
+          tokens,
+          numThreads: 2,
+          provider: 'cpu',
+        },
+        decodingMethod: 'greedy_search',
+      };
+    } else if (modelDef.engine === 'sherpa-paraformer') {
+      const model = Object.entries(files).find(([k]) => k.includes('model'))?.[1];
+      const tokens = Object.entries(files).find(([k]) => k.includes('tokens'))?.[1];
+      config = {
+        featConfig: { sampleRate: 16000, featureDim: 80 },
+        modelConfig: {
+          paraformer: { model },
+          tokens,
+          numThreads: 2,
+          provider: 'cpu',
+        },
+        decodingMethod: 'greedy_search',
+      };
+    } else if (modelDef.engine === 'sherpa-nemo') {
+      const encoder = Object.entries(files).find(([k]) => k.includes('encoder'))?.[1];
+      const decoder = Object.entries(files).find(([k]) => k.includes('decoder'))?.[1];
+      const joiner = Object.entries(files).find(([k]) => k.includes('joiner'))?.[1];
+      const tokens = Object.entries(files).find(([k]) => k.includes('tokens'))?.[1];
+      config = {
+        featConfig: { sampleRate: 16000, featureDim: 80 },
+        modelConfig: {
+          transducer: { encoder, decoder, joiner },
+          tokens,
+          numThreads: 2,
+          provider: 'cpu',
+          modelType: 'nemo_transducer',
+        },
+        decodingMethod: 'modified_beam_search',
+      };
+    }
 
-  // Write PCM to a temp WAV file (whisper.cpp expects 16kHz mono WAV)
-  const { app } = await import('electron');
-  const { join } = await import('path');
-  const { writeFileSync, unlinkSync } = await import('fs');
-  const tmpDir = app.getPath('temp');
-  const wavPath = join(tmpDir, `sn-voice-${Date.now()}.wav`);
-
-  // Create WAV header + PCM16 data
-  const samples = o.pcm;
-  const numSamples = samples.length;
-  const buffer = Buffer.alloc(44 + numSamples * 2);
-  buffer.write('RIFF', 0);
-  buffer.writeUInt32LE(36 + numSamples * 2, 4);
-  buffer.write('WAVE', 8);
-  buffer.write('fmt ', 12);
-  buffer.writeUInt32LE(16, 16);
-  buffer.writeUInt16LE(1, 20); // PCM
-  buffer.writeUInt16LE(1, 22); // mono
-  buffer.writeUInt32LE(16000, 24); // sample rate
-  buffer.writeUInt32LE(32000, 28); // byte rate
-  buffer.writeUInt16LE(2, 32); // block align
-  buffer.writeUInt16LE(16, 34); // bits per sample
-  buffer.write('data', 36);
-  buffer.writeUInt32LE(numSamples * 2, 40);
-  for (let i = 0; i < numSamples; i++) {
-    const s = Math.max(-1, Math.min(1, samples[i]));
-    buffer.writeInt16LE(Math.round(s * 32767), 44 + i * 2);
-  }
-  writeFileSync(wavPath, buffer);
-
-  // Auto-download whisper.cpp binary if not present
-  const { isWhisperBinaryInstalled, downloadWhisperBinary, getWhisperBinaryPath } = await import('./whisperModels');
-
-  if (!isWhisperBinaryInstalled()) {
-    o.onProgress?.('Setting up whisper engine (one-time)...');
-    await downloadWhisperBinary((msg) => o.onProgress?.(msg));
+    const recognizer = new sherpa.OfflineRecognizer(config);
+    cachedRecognizer = { modelId: o.model, recognizer };
   }
 
   o.onProgress?.('Transcribing...');
 
-  const { execFile } = await import('child_process');
-  const { promisify } = await import('util');
-  const execFileAsync = promisify(execFile);
-  const whisperBin = getWhisperBinaryPath();
-
-  try {
-    const args = [
-      '-m', modelPath,
-      '-f', wavPath,
-      '--no-timestamps',
-      '-l', o.language || 'auto',
-    ];
-    const { stdout } = await execFileAsync(whisperBin, args, { timeout: 120000 });
-    return stdout.trim();
-  } finally {
-    try { unlinkSync(wavPath); } catch {}
-  }
+  const recognizer = cachedRecognizer.recognizer as any;
+  const stream = recognizer.createStream();
+  stream.acceptWaveform({ sampleRate: 16000, samples: o.pcm });
+  recognizer.decode(stream);
+  const result = recognizer.getResult(stream);
+  return (result.text ?? '').trim();
 }
 
 function stripTrailingSlash(s: string): string {

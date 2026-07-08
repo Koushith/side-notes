@@ -34,7 +34,7 @@ export default defineConfig({
           build: {
             outDir: 'dist-electron',
             rollupOptions: {
-              external: ['electron', 'chokidar', 'fs', 'fs/promises', 'path', 'os', 'url', '@huggingface/transformers'],
+              external: ['electron', 'chokidar', 'fs', 'fs/promises', 'path', 'os', 'url', '@huggingface/transformers', 'sherpa-onnx-node'],
             },
           },
         },

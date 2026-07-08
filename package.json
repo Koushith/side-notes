@@ -58,6 +58,7 @@
     "mermaid": "^11.15.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "sherpa-onnx-node": "^1.13.4",
     "sigma": "^3.0.1",
     "simple-git": "^3.36.0",
     "tailwind-merge": "^2.5.5",
@@ -118,8 +119,8 @@
       "entitlementsInherit": "build/entitlements.mac.plist",
       "icon": "build/icon.icns",
       "notarize": {
-          "teamId": "HSNXURXG94"
-        },
+        "teamId": "HSNXURXG94"
+      },
       "extendInfo": {
         "NSMicrophoneUsageDescription": "SideNotes uses the microphone to transcribe your speech into notes when you dictate."
       }
