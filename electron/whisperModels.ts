@@ -107,80 +107,94 @@ export function getBinDir(): string {
   return dir;
 }
 
-const WHISPER_CPP_BINARY_URL =
-  process.arch === 'arm64'
-    ? 'https://github.com/ggerganov/whisper.cpp/releases/download/v1.7.5/whisper-v1.7.5-bin-darwin-arm64.zip'
-    : 'https://github.com/ggerganov/whisper.cpp/releases/download/v1.7.5/whisper-v1.7.5-bin-darwin-x86_64.zip';
-
 export function getWhisperBinaryPath(): string {
+  // Check common installed locations first, then our compiled copy
+  const candidates = [
+    '/opt/homebrew/bin/whisper-cpp',
+    '/opt/homebrew/bin/whisper-cli',
+    '/usr/local/bin/whisper-cpp',
+    '/usr/local/bin/whisper-cli',
+    join(getBinDir(), 'whisper-cli'),
+  ];
+  for (const p of candidates) {
+    if (existsSync(p)) return p;
+  }
   return join(getBinDir(), 'whisper-cli');
 }
 
 export function isWhisperBinaryInstalled(): boolean {
-  return existsSync(getWhisperBinaryPath());
+  const candidates = [
+    '/opt/homebrew/bin/whisper-cpp',
+    '/opt/homebrew/bin/whisper-cli',
+    '/usr/local/bin/whisper-cpp',
+    '/usr/local/bin/whisper-cli',
+    join(getBinDir(), 'whisper-cli'),
+  ];
+  return candidates.some((p) => existsSync(p));
 }
 
 export async function downloadWhisperBinary(
   onProgress?: (msg: string) => void
 ): Promise<string> {
+  if (isWhisperBinaryInstalled()) return getWhisperBinaryPath();
+
   const binDir = getBinDir();
-  const binPath = getWhisperBinaryPath();
-  if (existsSync(binPath)) return binPath;
+  const binPath = join(binDir, 'whisper-cli');
+  const srcDir = join(binDir, 'whisper-cpp-src');
 
-  onProgress?.('Downloading whisper engine...');
+  onProgress?.('Downloading whisper.cpp source...');
 
-  const zipPath = join(binDir, 'whisper-cpp.zip');
-
-  // Download the zip
-  await new Promise<void>((resolve, reject) => {
-    const doRequest = (url: string) => {
-      const lib = url.startsWith('https') ? https : http;
-      const req = lib.get(url, { headers: { 'User-Agent': 'SideNotes/1.0' } }, (res) => {
-        if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          doRequest(res.headers.location);
-          return;
-        }
-        if (!res.statusCode || res.statusCode >= 400) {
-          reject(new Error(`Failed to download whisper binary: HTTP ${res.statusCode}`));
-          return;
-        }
-        const file = createWriteStream(zipPath);
-        res.pipe(file);
-        file.on('finish', () => file.close(() => resolve()));
-        file.on('error', reject);
-      });
-      req.on('error', reject);
-    };
-    doRequest(WHISPER_CPP_BINARY_URL);
-  });
-
-  onProgress?.('Extracting whisper engine...');
-
-  // Extract the zip using macOS built-in unzip
+  // Clone a shallow copy of whisper.cpp
   const { execSync } = await import('child_process').then((m) => m);
-  execSync(`unzip -o "${zipPath}" -d "${binDir}"`, { stdio: 'ignore' });
-
-  // Find the whisper binary in the extracted contents
-  const extractedFiles = readdirSync(binDir, { recursive: true }) as string[];
-  const whisperFile = extractedFiles.find(
-    (f: string) => f.endsWith('/whisper-cli') || f === 'whisper-cli' || f.endsWith('/main') || f === 'main'
-  );
-
-  if (whisperFile) {
-    const extractedPath = join(binDir, whisperFile);
-    if (extractedPath !== binPath) {
-      copyFileSync(extractedPath, binPath);
+  try {
+    if (existsSync(srcDir)) {
+      execSync(`rm -rf "${srcDir}"`, { stdio: 'ignore' });
     }
+    execSync(
+      `git clone --depth 1 --branch v1.9.1 https://github.com/ggml-org/whisper.cpp.git "${srcDir}"`,
+      { stdio: 'ignore', timeout: 60000 }
+    );
+  } catch {
+    throw new Error('Failed to download whisper.cpp. Ensure git is installed, or run: brew install whisper-cpp');
   }
 
-  // Make executable
-  try { chmodSync(binPath, 0o755); } catch {}
+  onProgress?.('Compiling whisper engine (one-time, ~30s)...');
 
-  // Cleanup zip
-  try { unlinkSync(zipPath); } catch {}
+  try {
+    execSync('make -j whisper-cli', {
+      cwd: srcDir,
+      stdio: 'ignore',
+      timeout: 120000,
+      env: { ...process.env, WHISPER_NO_METAL: undefined },
+    });
+    const compiledPath = join(srcDir, 'build', 'bin', 'whisper-cli');
+    const altPath = join(srcDir, 'whisper-cli');
+    const src = existsSync(compiledPath) ? compiledPath : existsSync(altPath) ? altPath : null;
+    if (!src) {
+      // Try the old binary name
+      const mainPath = join(srcDir, 'main');
+      if (existsSync(mainPath)) {
+        copyFileSync(mainPath, binPath);
+      } else {
+        throw new Error('Compilation produced no binary');
+      }
+    } else {
+      copyFileSync(src, binPath);
+    }
+    chmodSync(binPath, 0o755);
+  } catch (err) {
+    // Cleanup
+    try { execSync(`rm -rf "${srcDir}"`, { stdio: 'ignore' }); } catch {}
+    throw new Error(
+      'Failed to compile whisper.cpp. Install Xcode Command Line Tools (xcode-select --install) or run: brew install whisper-cpp'
+    );
+  }
+
+  // Cleanup source
+  try { execSync(`rm -rf "${srcDir}"`, { stdio: 'ignore' }); } catch {}
 
   if (!existsSync(binPath)) {
-    throw new Error('Failed to extract whisper binary. Try installing manually: brew install whisper-cpp');
+    throw new Error('Whisper binary not found after build. Try: brew install whisper-cpp');
   }
 
   return binPath;
