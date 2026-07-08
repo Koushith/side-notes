@@ -4,7 +4,7 @@
 
 import { app } from 'electron';
 import { join } from 'path';
-import { existsSync, mkdirSync, createWriteStream, unlinkSync, readdirSync } from 'fs';
+import { existsSync, mkdirSync, createWriteStream, unlinkSync, readdirSync, renameSync, copyFileSync, chmodSync } from 'fs';
 import { stat } from 'fs/promises';
 import https from 'https';
 import http from 'http';
@@ -157,12 +157,11 @@ export async function downloadWhisperBinary(
   onProgress?.('Extracting whisper engine...');
 
   // Extract the zip using macOS built-in unzip
-  const { execSync } = require('child_process');
+  const { execSync } = await import('child_process').then((m) => m);
   execSync(`unzip -o "${zipPath}" -d "${binDir}"`, { stdio: 'ignore' });
 
   // Find the whisper binary in the extracted contents
-  const { readdirSync: readdir } = require('fs');
-  const extractedFiles = readdir(binDir, { recursive: true }) as string[];
+  const extractedFiles = readdirSync(binDir, { recursive: true }) as string[];
   const whisperFile = extractedFiles.find(
     (f: string) => f.endsWith('/whisper-cli') || f === 'whisper-cli' || f.endsWith('/main') || f === 'main'
   );
@@ -170,13 +169,11 @@ export async function downloadWhisperBinary(
   if (whisperFile) {
     const extractedPath = join(binDir, whisperFile);
     if (extractedPath !== binPath) {
-      const { copyFileSync } = require('fs');
       copyFileSync(extractedPath, binPath);
     }
   }
 
   // Make executable
-  const { chmodSync } = require('fs');
   try { chmodSync(binPath, 0o755); } catch {}
 
   // Cleanup zip
@@ -289,7 +286,6 @@ export function downloadModel(
               return;
             }
             try {
-              const { renameSync } = require('fs');
               renameSync(tempPath, destPath);
             } catch (err) {
               reject(err);
