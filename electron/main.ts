@@ -1203,6 +1203,10 @@ ipcMain.handle('whisper:modelsDir', async () => {
   return getModelsDir();
 });
 
+ipcMain.handle('whisper:status', async () => {
+  return { binaryInstalled: isWhisperBinaryInstalled() };
+});
+
 // ---- IPC: Export ----
 ipcMain.handle(
   'export:save',

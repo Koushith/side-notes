@@ -166,6 +166,7 @@ export interface ApiBridge {
     cancelDownload: (modelId: string) => Promise<boolean>;
     deleteModel: (modelId: string) => Promise<boolean>;
     getModelsDir: () => Promise<string>;
+    getStatus: () => Promise<{ binaryInstalled: boolean }>;
     onDownloadProgress: (handler: (p: WhisperDownloadProgress) => void) => () => void;
   };
 }

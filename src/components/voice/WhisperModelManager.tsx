@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Download, Trash2, Check, X, Loader2, HardDrive, Mic, CircleStop } from 'lucide-react';
+import { Download, Trash2, Check, X, Loader2, HardDrive, Mic, CircleStop, Terminal, CheckCircle2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { startRecording, decodeToPcm16k, type RecorderHandle } from '@/lib/recorder';
 import type { WhisperModelView, WhisperDownloadProgress } from '@/types';
@@ -16,6 +16,7 @@ export function WhisperModelManager({ selectedModel, onSelect }: Props) {
   const [loading, setLoading] = useState(true);
   const [testing, setTesting] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{ modelId: string; text: string; ok: boolean } | null>(null);
+  const [binaryReady, setBinaryReady] = useState<boolean | null>(null);
   const recorderRef = useRef<RecorderHandle | null>(null);
 
   const loadModels = async () => {
@@ -23,6 +24,10 @@ export function WhisperModelManager({ selectedModel, onSelect }: Props) {
     setModels(m);
     setLoading(false);
   };
+
+  useEffect(() => {
+    api.whisper.getStatus().then((s) => setBinaryReady(s.binaryInstalled));
+  }, []);
 
   useEffect(() => {
     loadModels();
@@ -120,12 +125,61 @@ export function WhisperModelManager({ selectedModel, onSelect }: Props) {
     );
   }
 
+  const hasDownloaded = models.some((m) => m.downloaded);
+
   return (
     <div className="space-y-1.5">
       <div className="flex items-center gap-2 mb-3">
         <HardDrive size={14} className="text-text-muted" />
         <span className="text-xs font-medium text-text-muted uppercase tracking-wide">Local Models</span>
       </div>
+
+      {/* Setup status */}
+      {binaryReady !== null && (
+        <div className={cn(
+          'rounded-lg border px-3 py-2.5 mb-3 text-[11.5px] leading-relaxed',
+          binaryReady && hasDownloaded
+            ? 'border-emerald-500/20 bg-emerald-500/5 text-emerald-400'
+            : 'border-border bg-bg text-text-muted'
+        )}>
+          {binaryReady && hasDownloaded ? (
+            <div className="flex items-center gap-2">
+              <CheckCircle2 size={13} className="shrink-0" />
+              <span>Ready. Hold your hotkey to dictate, or use the mic test below.</span>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="font-medium text-text text-xs">Setup (one-time)</div>
+              <div className="flex items-start gap-2">
+                <span className={cn('shrink-0 mt-0.5', binaryReady ? 'text-emerald-400' : 'text-text-subtle')}>
+                  {binaryReady ? <CheckCircle2 size={12} /> : <Terminal size={12} />}
+                </span>
+                <span>
+                  <span className={cn(binaryReady && 'line-through opacity-60')}>
+                    Install whisper engine:
+                  </span>
+                  {!binaryReady && (
+                    <code className="ml-1 px-1.5 py-0.5 rounded bg-bg-elevated text-[10.5px] font-mono text-text select-all">
+                      brew install whisper-cpp
+                    </code>
+                  )}
+                  {binaryReady && <span className="ml-1 text-emerald-400">done</span>}
+                </span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className={cn('shrink-0 mt-0.5', hasDownloaded ? 'text-emerald-400' : 'text-text-subtle')}>
+                  {hasDownloaded ? <CheckCircle2 size={12} /> : <Download size={12} />}
+                </span>
+                <span className={cn(hasDownloaded && 'line-through opacity-60')}>
+                  Download a model below (Base English recommended)
+                </span>
+                {hasDownloaded && <span className="ml-1 text-emerald-400">done</span>}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="max-h-[280px] overflow-y-auto space-y-1.5 pr-1">
       {models.map((model) => {
         const isDownloading = model.id in downloading;

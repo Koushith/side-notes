@@ -188,6 +188,7 @@ const api = {
     cancelDownload: (modelId: string) => ipcRenderer.invoke('whisper:download:cancel', modelId),
     deleteModel: (modelId: string) => ipcRenderer.invoke('whisper:delete', modelId),
     getModelsDir: () => ipcRenderer.invoke('whisper:modelsDir') as Promise<string>,
+    getStatus: () => ipcRenderer.invoke('whisper:status') as Promise<{ binaryInstalled: boolean }>,
     onDownloadProgress: (handler: (p: unknown) => void) => {
       const listener = (_: unknown, p: unknown) => handler(p);
       ipcRenderer.on('whisper:download:progress', listener);
